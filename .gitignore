@@ -1,0 +1,12 @@
+# build output
+build/
+out/
+.vs/
+CMakeUserPresets.json
+
+# rendered audio & plots
+renders/
+
+# python
+__pycache__/
+.venv/
