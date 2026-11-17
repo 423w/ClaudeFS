@@ -15,7 +15,9 @@ FetchContent_MakeAvailable(Catch2)
 # One test executable for the whole core; test files are added here as lessons add primitives.
 add_executable(fss_tests
     test_math.cpp
-    test_wav.cpp)
+    test_wav.cpp
+    test_phasor.cpp
+    test_sine.cpp)
 # Catch2WithMain supplies main(), so test files contain only TEST_CASEs.
 # fss::warnings is linked here, but not to Catch2 itself (see the top-level CMakeLists.txt).
 target_link_libraries(fss_tests PRIVATE fss::core fss::wav fss::warnings Catch2::Catch2WithMain)

@@ -45,7 +45,7 @@ Make sure it's CMake: every audio library and plugin SDK speaks it.
 Catch2 v3 (built-in micro-benchmarks, rich matchers) vs doctest (tiny, very fast compile).
 Either is fine; pick one and move on.
 
-### D5. Phase representation: `OPEN`  *(L1.2)*
+### D5. Phase representation: `DECIDED` → `uint32_t` fixed point (cycles × 2^32)  *(L1.2, see Log)*
 - `float` in [0,1): simple, but precision drifts for long notes and low frequencies.
 - `double` in [0,1): simple and precise enough. Recommended to start.
 - `uint32_t` fixed point: free wraparound (unsigned overflow is well-defined), exact, and the way the DX7 does it.
@@ -189,6 +189,37 @@ doesn't have.
 CFS inherits the owner's D2 as-is: FL Studio, hand-written CLAP first (L3.2), VST3 via clap-wrapper near
 the end (L3.3). Nothing in L0.4 argued otherwise.
 **The owner might choose differently if:** n/a. This is the owner's decision; CFS follows it.
+
+### 2026-11-17: D5 decided (CFS): `uint32_t` fixed-point phase, one cycle = 2^32
+**Decision.** `fss::dsp::Phase` is a `uint32_t` fraction of a cycle. `Phasor` adds a `uint32_t`
+increment (`round(f/fs · 2^32)`, wrapped modulo 2^32, so negative and above-Nyquist frequencies alias
+correctly) and relies on unsigned overflow for the wrap. Sines index their table with the top bits.
+**Options considered.** `float` in [0,1); `double` in [0,1) (the curriculum's suggestion); `uint32_t`;
+`uint64_t` (same properties as uint32, 2^32× finer).
+**Measured** (one hour of samples at 48 kHz, `fss_render l1.2`):
+
+| | 0.001 Hz | 0.1 Hz | 440 Hz |
+|---|---|---|---|
+| float | **stalls at phase 0.5** | +2.17 cents | −1.0 cycle drift |
+| double | exact (to 1e-6 cycles) | exact | exact |
+| uint32 | −9.28 cents | +0.029 cents | +0.00002 cents, +0.018 cycle drift |
+
+**Why uint32 and not double**, even though double measured *more precise*:
+(1) the wrap is free and exact, with no `floor()` and no branch;
+(2) phase is a pure integer function of the sample count, so renders are bit-reproducible, which golden
+files and the block-size invariance test (L6.1) need;
+(3) the top bits *are* the table index (`sineTable`: shift + mask, no float→int conversion), the fastest
+sine measured (0.71 ns vs 5.4 ns for `std::sin`);
+(4) 32-bit lanes are twice as many per SIMD register as double (L6.2);
+(5) phase modulation (L1.4) is an integer add that wraps by itself.
+Its precision cost (frequency quantized to 1.1e-5 Hz) is inaudible at audio rates, constant rather
+than growing, and only large *relatively* for very slow LFOs (9 cents at 0.001 Hz, a 1000-second period
+off by 0.5 %).
+**Revisit if:** very slow LFOs or long-term drift between oscillators ever matter (switch those to
+`uint64_t`, same code shape); or through-zero FM / PM-depth conversion from float turns out costly in L1.4.
+**The owner might choose differently if:** they value "phase is just a number in [0,1)" readability
+over bit-exactness. `double` is simpler to reason about, and it measured more precise here. It's a
+completely defensible choice, and the curriculum's recommendation.
 
 <!-- Append entries like:
 ### 2026-11-20: D5 decided: double phase in [0,1)

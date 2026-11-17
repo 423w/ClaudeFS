@@ -8,6 +8,9 @@ target_include_directories(fss_wav PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_compile_features(fss_wav PUBLIC cxx_std_20)
 target_link_libraries(fss_wav PRIVATE fss::warnings)
 
-# fss_render: the offline host. Renders the current lesson's scenarios into renders/.
-add_executable(fss_render main.cpp)
+# fss_render: the offline host. One source file per lesson's scenarios.
+add_executable(fss_render
+    main.cpp
+    l1_1.cpp
+    l1_2.cpp)
 target_link_libraries(fss_render PRIVATE fss::core fss::wav fss::warnings)
