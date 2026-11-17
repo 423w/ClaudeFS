@@ -38,7 +38,7 @@ endif()
 add_executable(fss_standalone
     main.cpp
     audio_device.cpp)
-target_link_libraries(fss_standalone PRIVATE fss::core fss_miniaudio fss::warnings)
+target_link_libraries(fss_standalone PRIVATE fss::core fss::midi fss_miniaudio fss::warnings)
 # L2.2: Debug builds link the allocation trap, so any allocation on the audio thread aborts on the spot.
 # (Linking an OBJECT library passes its .obj straight to the linker, which is what makes the operator new
 # replacement take effect.) Release builds keep the C runtime's allocator untouched.

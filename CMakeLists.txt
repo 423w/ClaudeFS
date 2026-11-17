@@ -43,6 +43,7 @@ endif()
 
 add_subdirectory(core)
 add_subdirectory(tools/render)
+add_subdirectory(hosts/midi) # L2.3: MidiMessage everywhere; WinMM input + monitor on Windows only
 
 # The real-time host (L2.1). Default ON only on Windows, the platform it's developed and tested on;
 # miniaudio itself is cross-platform, so turning it on elsewhere should work but is untested.

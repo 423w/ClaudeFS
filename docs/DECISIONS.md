@@ -72,7 +72,7 @@ a stolen voice fades out (avoids clicks).
 - RtAudio / PortAudio: older, solid.
 - JUCE `AudioDeviceManager`: easy if you've already committed to JUCE.
 
-### D10. MIDI input: `OPEN`  *(L2.3)*
+### D10. MIDI input: `DECIDED` → WinMM `midiIn*` by hand  *(L2.3, see Log)*
 WinMM `midiInOpen` by hand (simple C API on Windows 10; teaches callbacks and raw MIDI bytes) vs
 RtMidi / libremidi (cross-platform). Recommendation: WinMM by hand. It's small.
 
@@ -301,6 +301,19 @@ WASAPI): shared mode forces 10 ms periods (≈ 35 ms latency); exclusive mode gr
 remains the stretch goal. In a plugin (Branch 3) the host owns the device and this goes away.
 **The owner might choose differently if:** they want the deep dive (raw WASAPI event-driven shared mode is
 the curriculum's stretch), or they already know JUCE.
+
+### 2026-11-17: D10 decided (CFS): WinMM by hand
+**Decision.** `midiInOpen` with a callback (hosts/midi), pushing 4-byte `MidiMessage`s into an
+`SpscQueue<MidiMessage, 1024>`; real-time bytes (clock, active sensing) dropped at the source; a pure,
+portable classifier and a running-status byte-stream parser for everything that isn't WinMM.
+**Options considered.** WinMM by hand; RtMidi; libremidi; Windows MIDI Services (Windows 11-oriented).
+**Why.** It's ~150 lines, no dependency, and it teaches exactly what L2.3 is about: a callback on a thread
+you don't own, raw status/data bytes, and a lock-free hand-off to the audio thread. The parsing layer is
+host-independent, so the CLAP host (which also delivers raw MIDI 1.0 bytes) reuses it.
+**Revisit if:** cross-platform standalone builds matter (RtMidi/libremidi), MIDI 2.0 / per-note
+expression is wanted, or a device misbehaves under WinMM.
+**The owner might choose differently if:** they'd rather not touch Win32 at all (libremidi is a clean
+modern C++ choice), or they want macOS/Linux support for the standalone.
 
 <!-- Append entries like:
 ### 2026-11-20: D5 decided: double phase in [0,1)

@@ -1,6 +1,7 @@
 // fss_standalone (L2.1): play fss::Engine through the default audio device, live.
 //
 //   fss_standalone [--seconds N] [--period FRAMES] [--rate HZ] [--variable] [--glitch-ms MS] [--keys] [--exclusive]
+//                  [--midi N] [--list-midi]
 //
 //   default   plays a hard-coded chord (L2.1 step 3), releases it, prints device + timing statistics
 //   --keys    play with the computer keyboard while the console window has focus (L2.1 step 5):
@@ -17,6 +18,10 @@
 #include <fss/engine.h>
 #include <fss/synth/presets.h>
 #include <fss/util/realtime_guard.h>
+#include <fss/util/spsc_queue.h>
+
+#include "midi_input_winmm.h"
+#include "midi_stream.h"
 
 #include <algorithm>
 #include <array>
@@ -65,12 +70,15 @@ public:
         glitch_ = std::chrono::microseconds(static_cast<std::int64_t>(glitchMs * 1000.0));
     }
 
-    // ---- main thread → audio thread ------------------------------------------------------------
-    // L2.1's deliberately simple hand-off: one atomic flag per key ("is it down?"). The audio thread compares
-    // with what it last saw and turns differences into Events at the start of each block. Lock-free and
-    // allocation-free, but LOSSY: a key pressed and released between two callbacks is never seen, and timing
-    // is quantized to the block. L2.3 replaces this with a queue of time-stamped events.
-    void setKeyDown(std::uint8_t key, bool down) noexcept { keyDown_[key].store(down, std::memory_order_release); }
+    // ---- other threads → audio thread (L2.3) -------------------------------------------------------
+    // Two single-producer queues, because SPSC means exactly one producer each:
+    //   uiEvents_  main thread (computer keyboard, demo chord) → audio thread
+    //   midi_      WinMM's callback thread → audio thread (the queue lives inside MidiInputWinmm)
+    // This replaces L2.1's one-atomic-flag-per-key hand-off, which lost key taps shorter than a block.
+    // A queue keeps every event, in order. If it's full, the *producer* drops the event (push returns
+    // false): the audio thread must never wait, and losing a note-on is better than a glitch.
+    bool postEvent(const Event& e) noexcept { return uiEvents_.push(e); }
+    void attachMidi(midi::MidiInputWinmm* input) noexcept { midi_ = input; } // before start() only
 
     void render(float* out, std::uint32_t frames, std::uint32_t channels) noexcept override
     {
@@ -81,16 +89,18 @@ public:
             firstCallbackSeen_ = true;
         }
 
-        // Key-state differences → events at frame 0 of this callback. Fixed-size array: no allocation.
+        // Drain both queues into a fixed-size event array (bounded: at most events_.size() per callback;
+        // anything beyond waits in its queue for the next callback, it isn't lost). All events land on
+        // frame 0 of this callback. Mapping each event's arrival time to a sample offset would remove up to
+        // one callback of timing jitter: see the L2.3 journal.
         std::size_t numEvents = 0;
-        for (std::size_t k = 0; k < keySeen_.size(); ++k) {
-            const bool down = keyDown_[k].load(std::memory_order_acquire);
-            if (down != keySeen_[k] && numEvents < events_.size()) {
-                const auto key = static_cast<std::uint8_t>(k);
-                events_[numEvents++] = down ? Event::noteOn(0, key, 0.8f) : Event::noteOff(0, key);
-                keySeen_[k] = down;
-            }
-        }
+        Event e;
+        while (numEvents < events_.size() && uiEvents_.pop(e))
+            events_[numEvents++] = e;
+        midi::MidiMessage m;
+        while (midi_ && numEvents < events_.size() && midi_->pop(m))
+            if (midi::toEvent(midi::classify(m), 0, e))
+                events_[numEvents++] = e;
 
         // The Engine writes planar L/R; the device wants interleaved. Process in chunks of ≤ kMaxBlock.
         std::uint32_t done = 0;
@@ -133,8 +143,8 @@ private:
     Engine engine_;
     std::array<float, kMaxBlock> left_{}, right_{};
     std::array<Event, 128> events_{};
-    std::array<std::atomic<bool>, 128> keyDown_{};
-    std::array<bool, 128> keySeen_{}; // audio-thread-only copy: plain bools
+    util::SpscQueue<Event, 256> uiEvents_;
+    midi::MidiInputWinmm* midi_ = nullptr;
     std::vector<CallbackRecord> records_;
     std::atomic<std::size_t> count_{0};
     // Lock-free atomics are a real-time requirement, not a given: a non-lock-free atomic hides a mutex.
@@ -152,6 +162,8 @@ struct Options {
     bool variable = false;
     bool keys = false;
     bool exclusive = false;
+    bool listMidi = false;
+    int midiDevice = -1; // -1 = no MIDI input
     double glitchMs = 0.0;
 };
 
@@ -165,14 +177,16 @@ bool parseNumber(std::string_view text, T& out)
 
 void printUsage()
 {
-    std::puts("usage: fss_standalone [--seconds N] [--period FRAMES] [--rate HZ] [--variable] [--glitch-ms MS] [--keys] [--exclusive]\n"
+    std::puts("usage: fss_standalone [--seconds N] [--period FRAMES] [--rate HZ] [--variable] [--glitch-ms MS] [--keys] [--exclusive] [--midi N] [--list-midi]\n"
               "  --seconds N      total play time, 0.5..600 (default 3)\n"
               "  --period FRAMES  requested frames per callback, 16..8192 (default 256)\n"
               "  --rate HZ        requested sample rate, 8000..384000 (default 48000)\n"
               "  --variable       let callback sizes vary (no miniaudio fixed-size buffering)\n"
               "  --glitch-ms MS   sleep MS inside every callback: deliberately miss deadlines (0..100)\n"
               "  --keys           play with the computer keyboard (Z..M, Q..U rows); Esc quits\n"
-              "  --exclusive      WASAPI exclusive mode (lower latency if the device allows it)");
+              "  --exclusive      WASAPI exclusive mode (lower latency if the device allows it)\n"
+              "  --midi N         play from MIDI input device N (see --list-midi); runs for --seconds\n"
+              "  --list-midi      list MIDI input devices and exit");
 }
 
 bool parseArgs(int argc, char** argv, Options& o)
@@ -193,6 +207,10 @@ bool parseArgs(int argc, char** argv, Options& o)
             o.variable = true;
         } else if (a == "--exclusive") {
             o.exclusive = true;
+        } else if (a == "--list-midi") {
+            o.listMidi = true;
+        } else if (a == "--midi" && hasValue) {
+            ok = parseNumber(argv[++i], o.midiDevice) && o.midiDevice >= 0;
         } else if (a == "--keys") {
             o.keys = true;
         } else {
@@ -259,10 +277,10 @@ void playChord(EngineHost& host, double seconds)
 {
     constexpr std::uint8_t chord[] = {57, 60, 64};
     for (std::uint8_t k : chord)
-        host.setKeyDown(k, true);
+        host.postEvent(Event::noteOn(0, k, 0.8f));
     std::this_thread::sleep_for(std::chrono::duration<double>(std::max(0.0, seconds - 1.0)));
     for (std::uint8_t k : chord)
-        host.setKeyDown(k, false);
+        host.postEvent(Event::noteOff(0, k));
     std::this_thread::sleep_for(std::chrono::duration<double>(std::min(seconds, 1.0)));
 }
 
@@ -277,17 +295,22 @@ void playKeys(EngineHost& host, double seconds)
         {'5', 66}, {'T', 67}, {'6', 68}, {'Y', 69}, {'7', 70}, {'U', 71}};
     std::puts("--keys: play Z..M (C3..B3) and Q..U (C4..B4) while this window has focus; Esc quits.");
     const HWND console = GetConsoleWindow();
+    bool wasDown[128] = {}; // main-thread copy, so only *changes* become events
+    const auto set = [&](std::uint8_t key, bool down) {
+        if (down != wasDown[key] && host.postEvent(down ? Event::noteOn(0, key, 0.8f) : Event::noteOff(0, key)))
+            wasDown[key] = down; // if the queue was full, try again next poll instead of losing the change
+    };
     const auto end = Clock::now() + std::chrono::duration<double>(seconds);
     while (Clock::now() < end) {
         const bool focused = GetForegroundWindow() == console; // don't read keys typed into other apps
         if (focused && (GetAsyncKeyState(VK_ESCAPE) & 0x8000))
             break;
         for (const auto& [vk, key] : map)
-            host.setKeyDown(key, focused && (GetAsyncKeyState(vk) & 0x8000) != 0);
+            set(key, focused && (GetAsyncKeyState(vk) & 0x8000) != 0);
         std::this_thread::sleep_for(std::chrono::milliseconds(1));
     }
     for (const auto& [vk, key] : map)
-        host.setKeyDown(key, false);
+        set(key, false);
     std::this_thread::sleep_for(std::chrono::milliseconds(500)); // release tails
 #else
     (void)host;
@@ -302,6 +325,14 @@ int run(int argc, char** argv)
     if (!parseArgs(argc, argv, opt)) {
         printUsage();
         return 2;
+    }
+
+    if (opt.listMidi) {
+        const auto names = midi::MidiInputWinmm::listDevices();
+        std::printf("%zu MIDI input device(s)\n", names.size());
+        for (std::size_t i = 0; i < names.size(); ++i)
+            std::printf("  %zu: %s\n", i, names[i].c_str());
+        return 0;
     }
 
     // Big enough object to keep off the stack (the Engine holds 20 voices).
@@ -332,6 +363,18 @@ int run(int argc, char** argv)
     const auto maxRecords = static_cast<std::size_t>(opt.seconds * info.sampleRateHz / 16.0) + 1024;
     host->prepare(info.sampleRateHz, maxRecords, opt.glitchMs);
 
+    // MIDI (L2.3): open before the audio starts, so the audio thread's pointer never changes while it runs.
+    midi::MidiInputWinmm midiIn;
+    if (opt.midiDevice >= 0) {
+        std::string err;
+        if (!midiIn.open(static_cast<unsigned>(opt.midiDevice), err)) {
+            std::fprintf(stderr, "error: MIDI device %d: %s (try --list-midi)\n", opt.midiDevice, err.c_str());
+            return 1;
+        }
+        host->attachMidi(&midiIn);
+        std::printf("midi:      device %d open; play for %.0f s\n", opt.midiDevice, opt.seconds);
+    }
+
     if (!device.start()) {
         std::fprintf(stderr, "error: %s\n", device.lastError().c_str());
         return 1;
@@ -340,9 +383,12 @@ int run(int argc, char** argv)
     util::setRealtimeTrapMode(util::RealtimeTrapMode::Abort);
     if (opt.keys)
         playKeys(*host, opt.seconds);
+    else if (opt.midiDevice >= 0)
+        std::this_thread::sleep_for(std::chrono::duration<double>(opt.seconds)); // just listen to MIDI
     else
         playChord(*host, opt.seconds);
-    device.stop();
+    device.stop();   // first the audio thread stops reading the MIDI queue...
+    midiIn.close();  // ...then the MIDI thread stops writing it
 
     printStats(*host, info);
     std::printf("rt trap:              %s, %llu violations\n",
