@@ -171,7 +171,7 @@ Modes (tell Claude which one you want):
 - [x] L0.1 Listening & vocabulary
 - [x] L0.2 Just-enough math
 - [x] L0.3 Toolchain & repo skeleton
-- [ ] L0.4 Choose your synth (D1, D2)
+- [x] L0.4 Choose your synth (D1, D2)
 
 ### Branch 1: The Offline Engine
 - [ ] L1.1 Digital audio & WAV

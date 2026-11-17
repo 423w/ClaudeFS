@@ -11,7 +11,7 @@ Status legend: `OPEN` (not yet faced) · `LEANING` (tentative, revisit at the na
 
 ---
 
-### D1. Synth type: `LEANING` → FM-core hybrid  *(L0.4, confirm at end of L1.5)*
+### D1. Synth type: `LEANING` → FM-core hybrid  *(CFS L0.4 confirmed the leaning, see Log; confirm at end of L1.5)*
 | Option | Learning payoff | Sound | Risk |
 |---|---|---|---|
 | Subtractive / VA | Anti-aliased oscillators, filter design (deep DSP) | Classic analog, intuitive | "Sounds like everything else" |
@@ -165,6 +165,30 @@ builds can't reach GitHub (vendor the tarball or use a local mirror via `FETCHCO
 **The owner might choose differently if:** they value fast compiles and zero network access over
 features. doctest, vendored as one header, is a perfectly good answer for this project, and its
 `doctest::Approx` covers most float checks.
+
+### 2026-11-17: D1 leaning confirmed in CFS (L0.4): FM-core hybrid, still `LEANING`
+**Decision.** Keep FM-core hybrid: 4-op phase modulation → per-voice VA filter → amp. Status stays
+`LEANING` until the end-of-L1.5 check.
+**Options considered.** Pure FM (DX-style), subtractive/VA, wavetable-first, FM-core hybrid; additive,
+physical modeling and granular only as detours (full table above).
+**Why.** Evidence instead of taste (Claude can't listen): a numpy 2-op sketch (`tools/analyze/fm2op_sketch.py`)
+matched Chowning/Bessel predictions to 0.01 dB, confirming the two properties that drive the choice.
+(1) FM gives harmonic *or* inharmonic spectra from the ratio alone (1:1.41 → no common fundamental),
+which subtractive can't do. (2) FM's brightness control is non-monotonic (the carrier vanishes at index
+2.405), which is exactly what makes pure FM hard to program, and what a filter after the operators
+fixes. FM also starts from sines, so Branch 1 produces clean sound before any anti-aliasing work, while
+the filter half still teaches L1.9–L1.10.
+**Revisit if:** by L1.5 the 4-op voice can't produce usable everyday sounds (bass, pad, keys) with the
+filter's help; or operator-envelope count makes the UI unmanageable in L3.5.
+**The owner might choose differently if:** they find FM tweaking frustrating rather than intriguing in
+Dexed, or their music leans on warm analog pads and acid lines more than keys and bells. Then the pivot
+clause (2–3 VA oscillators instead of the operator stack) is the right call. Taste is the input Claude
+doesn't have.
+
+### 2026-11-17: D2 recorded for CFS: unchanged
+CFS inherits the owner's D2 as-is: FL Studio, hand-written CLAP first (L3.2), VST3 via clap-wrapper near
+the end (L3.3). Nothing in L0.4 argued otherwise.
+**The owner might choose differently if:** n/a. This is the owner's decision; CFS follows it.
 
 <!-- Append entries like:
 ### 2026-11-20: D5 decided: double phase in [0,1)
