@@ -168,7 +168,7 @@ Modes (tell Claude which one you want):
 ## Progress
 
 ### Branch 0: Orientation
-- [ ] L0.1 Listening & vocabulary
+- [x] L0.1 Listening & vocabulary
 - [ ] L0.2 Just-enough math
 - [ ] L0.3 Toolchain & repo skeleton
 - [ ] L0.4 Choose your synth (D1, D2)
