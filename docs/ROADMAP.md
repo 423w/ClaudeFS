@@ -176,7 +176,7 @@ Modes (tell Claude which one you want):
 ### Branch 1: The Offline Engine
 - [x] L1.1 Digital audio & WAV
 - [x] L1.2 Phase accumulator & sine
-- [ ] L1.3 Envelopes
+- [x] L1.3 Envelopes
 - [ ] L1.4 Two-operator FM/PM ★M1
 - [ ] L1.5 Operators, algorithms & feedback
 - [ ] L1.6 The note

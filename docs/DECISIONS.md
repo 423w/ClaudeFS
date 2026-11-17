@@ -51,7 +51,7 @@ Either is fine; pick one and move on.
 - `uint32_t` fixed point: free wraparound (unsigned overflow is well-defined), exact, and the way the DX7 does it.
   A great C++ lesson. Consider switching once it clicks.
 
-### D6. Envelope model: `OPEN`  *(L1.3)*
+### D6. Envelope model: `DECIDED` → ADSR, exponential segments (one-pole with overshoot), 1 ms minimum  *(L1.3, see Log)*
 - ADSR with exponential segments (standard; start here).
 - DX-style 4 rates + 4 levels (more expressive for FM; authentic).
 - Multi-segment (MSEG, as in Vital and Serum): most flexible, and the most UI work.
@@ -220,6 +220,26 @@ off by 0.5 %).
 **The owner might choose differently if:** they value "phase is just a number in [0,1)" readability
 over bit-exactness. `double` is simpler to reason about, and it measured more precise here. It's a
 completely defensible choice, and the curriculum's recommendation.
+
+### 2026-11-17: D6 decided (CFS): ADSR with exponential (one-pole, overshoot-target) segments
+**Decision.** `fss::dsp::Adsr`: attack aims at 1.3 (RC-charging curve, reaches 1.0 in exactly attackMs);
+decay and release are exponential falls aimed 0.001 past their end, with times defined as a *rate*: from
+full scale, −60 dB after exactly decay/releaseMs (silent ≈ 11 % later). Sustain is a linear level. Gate-on
+restarts the attack from the current level; gate-off releases from the current level in any stage. All
+times are clamped to ≥ 1 ms. Double-precision state.
+**Options considered.** ADSR linear segments; ADSR exponential (chosen); DX-style 4 rates + 4 levels;
+multi-segment (MSEG).
+**Why.** Exponential falls are straight lines in dB, which is how loudness is heard, and the overshoot
+target makes segments finish in finite, exactly known time. ADSR is what every player already knows,
+and four knobs per operator × 4 operators is already 16 envelope knobs. The 1 ms floor is measured:
+it's where onset click energy (−46 dB above 2 kHz, sine starting at its peak) drops below a bare sine
+starting at zero (−44 dB). Times verified identical at 44.1/48/96 kHz (−60 dB at 500.00 ms).
+**Revisit if:** FM patches need the DX-style "attack to level 1, decay to level 2, ..." shapes for
+authentic e-pianos/brass (L1.5/L4.7); or a velocity → attack-time modulation wants a different
+time definition. MSEG remains the Branch 4 option.
+**The owner might choose differently if:** they find "time to −60 dB" less intuitive than "time to
+zero", or prefer linear attacks (which sound more "digital"/snappy). Both are one-line changes here.
+A DX-style 4-rate/4-level envelope is also a very reasonable FM-first choice.
 
 <!-- Append entries like:
 ### 2026-11-20: D5 decided: double phase in [0,1)

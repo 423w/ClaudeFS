@@ -32,17 +32,26 @@ def main() -> None:
     p.add_argument("wav", nargs="+")
     p.add_argument("--cutoff", type=float, default=2000.0, help="Hz; energy above this counts as click")
     p.add_argument("--half", type=int, default=512, help="samples on each side of the seam")
+    p.add_argument("--at", type=float, action="append", default=[],
+                   help="also measure a window centred at this time in seconds (e.g. a note-off); repeatable")
     args = p.parse_args()
 
-    print(f"{'file':44} {'first':>7} {'last':>8} {'start dB':>9} {'end dB':>8}   (energy above {args.cutoff:g} Hz)")
+    at_cols = "".join(f" {'@' + format(t, 'g') + 's':>9}" for t in args.at)
+    print(f"{'file':44} {'first':>7} {'last':>8} {'start dB':>9} {'end dB':>8}{at_cols}"
+          f"   (energy above {args.cutoff:g} Hz)")
     for path in args.wav:
         rate, x = wavio.load_wav(path)
         h = min(args.half, len(x))
         z = np.zeros(h)
         start = np.concatenate([z, x[:h]])
         end = np.concatenate([x[-h:], z])
+        cols = ""
+        for t in args.at:
+            c = int(round(t * rate))
+            seg = x[max(c - h, 0):c + h]
+            cols += f" {edge_energy_db(seg, rate, args.cutoff):9.1f}"
         print(f"{path:44} {x[0]:7.3f} {x[-1]:8.3f} {edge_energy_db(start, rate, args.cutoff):9.1f} "
-              f"{edge_energy_db(end, rate, args.cutoff):8.1f}")
+              f"{edge_energy_db(end, rate, args.cutoff):8.1f}{cols}")
 
 
 if __name__ == "__main__":
