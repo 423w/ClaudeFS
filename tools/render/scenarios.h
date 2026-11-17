@@ -12,5 +12,6 @@ void renderL1_3(const std::filesystem::path& outDir); // l1_3.cpp: ADSR envelope
 void renderL1_4(const std::filesystem::path& outDir); // l1_4.cpp: two-operator FM, Chowning sounds
 void renderL1_5(const std::filesystem::path& outDir); // l1_5.cpp: 4-op voice, algorithms, feedback
 void renderL1_6(const std::filesystem::path& outDir); // l1_6.cpp: patch, velocity, key scaling, scores
+void renderL1_7(const std::filesystem::path& outDir); // l1_7.cpp: Engine, polyphony, stealing, the M2 piece
 
 } // namespace fss::render

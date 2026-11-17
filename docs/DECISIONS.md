@@ -62,7 +62,7 @@ Recommendation: ADSR now, and generalize to multi-segment in Branch 4 if you wan
 - **Recommendation:** 4 operators, stored internally as a **free modulation matrix**, with
   **algorithm presets** that just fill in the matrix. You get easy UX and full flexibility from one data structure.
 
-### D8. Polyphony & voice stealing: `OPEN`  *(L1.7, refined L2.5)*
+### D8. Polyphony & voice stealing: `DECIDED` → 16 voices + 4 fade slots; steal released-oldest, then held-oldest; 5 ms fade  *(L1.7, see Log; refine in L2.5)*
 Voice count (8? 16? 32?), steal policy (oldest, quietest, same-key retrigger), and how fast
 a stolen voice fades out (avoids clicks).
 
@@ -269,6 +269,24 @@ or the filter lessons show the hybrid needs a different oscillator core.
 **The owner might choose differently if:** FM sound design in their own FSS felt like a fight rather
 than a puzzle. Then the pivot (2–3 VA oscillators into the same filter/amp/voice structure) is right
 for FSS even though CFS stays FM.
+
+### 2026-11-17: D8 decided (CFS): 16-note polyphony, 4 steal-headroom slots, 5 ms steal fade
+**Decision.** `Engine::kMaxPolyphony = 16` sounding notes in a pool of 20 voices. Over the limit, the
+victim is the oldest *released* voice, else the oldest held one; it fades linearly over 5 ms *in its own
+slot* while the new note starts immediately in a spare slot (if > 4 steals happen within 5 ms, the quietest
+fading voice is cut: a deliberate last resort). A repeated key fades its old voice and starts a fresh one
+(a re-strike) instead of restarting in place. Voices free themselves when their carriers go idle.
+**Options considered.** Voice count 8 / 16 / 32. Steal oldest / quietest / released-first / same-key.
+Fade schemes: hard cut (clicks); release-then-start in the same slot (delays the new note by the fade);
+extra fade slots (chosen).
+**Why.** 16 covers two-handed playing with sustain-pedal tails for FM sounds. Released-first steals what
+the ear already expects to go away. Fade slots give no click *and* no latency. Measured (48 notes 25 ms
+apart into 8 voices, pure-sine pad): worst click −51 dB with the fade vs −37.5 dB with a hard cut;
+loud frames 30 vs 111. Same-key re-strike avoids a phase-reset click.
+**Revisit if:** L2.6 profiling shows 20 voices is too costly (it won't be at 4 ops); a pad needs more than
+16 notes (raise it); or quietest-first stealing sounds better live (L2.5 refines this, with sustain).
+**The owner might choose differently if:** they implement release-then-start (simpler, a few ms of
+delay is often unnoticeable), or prefer "quietest" stealing (needs a cheap per-voice level meter).
 
 <!-- Append entries like:
 ### 2026-11-20: D5 decided: double phase in [0,1)

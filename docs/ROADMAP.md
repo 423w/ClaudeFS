@@ -180,7 +180,7 @@ Modes (tell Claude which one you want):
 - [x] L1.4 Two-operator FM/PM ★M1
 - [x] L1.5 Operators, algorithms & feedback
 - [x] L1.6 The note
-- [ ] L1.7 Voices, polyphony & the Engine ★M2
+- [x] L1.7 Voices, polyphony & the Engine ★M2
 - [ ] L1.8 Waveforms & aliasing
 - [ ] L1.9 Filters I
 - [ ] L1.10 Filters II
