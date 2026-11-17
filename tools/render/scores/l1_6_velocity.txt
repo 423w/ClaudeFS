@@ -1,0 +1,6 @@
+# L1.6: the same note (C4) at rising velocities: 20, 50, 80, 110, 127.  t_ms key vel dur_ms
+     0   60   20 450
+   600   60   50 450
+  1200   60   80 450
+  1800   60  110 450
+  2400   60  127 450

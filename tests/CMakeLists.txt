@@ -20,10 +20,12 @@ add_executable(fss_tests
     test_sine.cpp
     test_adsr.cpp
     test_operator.cpp
-    test_fm_voice.cpp)
+    test_fm_voice.cpp
+    test_note.cpp
+    test_score.cpp)
 # Catch2WithMain supplies main(), so test files contain only TEST_CASEs.
 # fss::warnings is linked here, but not to Catch2 itself (see the top-level CMakeLists.txt).
-target_link_libraries(fss_tests PRIVATE fss::core fss::wav fss::warnings Catch2::Catch2WithMain)
+target_link_libraries(fss_tests PRIVATE fss::core fss::wav fss::score fss::warnings Catch2::Catch2WithMain)
 
 # catch_discover_tests registers every TEST_CASE as its own CTest test (it runs `fss_tests --list-tests`
 # after each build). So `ctest` reports and re-runs tests individually instead of one big pass/fail.
