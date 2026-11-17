@@ -67,6 +67,8 @@ version**, and **experiments to try**.
 - Units in names or types: `cutoffHz`, `attackMs`, `detuneCents`, `levelDb`. Phase units (cycles vs radians) are always documented.
 - Every new primitive gets a unit test. The engine keeps the block-size invariance test green.
 - Parameters are defined once, in the param table (stable IDs; never reuse or renumber).
+- Text that reaches a Windows console or command line (printed output, CTest/Catch2 test names) is ASCII.
+  Unicode (→, −, ×) is fine in comments, docs and file contents. (Learned the hard way in L0.2–L1.1.)
 
 ## Environment
 - Windows 10, PowerShell + Git Bash. Build with CMake + Ninja + MSVC (unless DECISIONS.md says otherwise).

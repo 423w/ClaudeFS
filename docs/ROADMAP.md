@@ -174,7 +174,7 @@ Modes (tell Claude which one you want):
 - [x] L0.4 Choose your synth (D1, D2)
 
 ### Branch 1: The Offline Engine
-- [ ] L1.1 Digital audio & WAV
+- [x] L1.1 Digital audio & WAV
 - [ ] L1.2 Phase accumulator & sine
 - [ ] L1.3 Envelopes
 - [ ] L1.4 Two-operator FM/PM ★M1

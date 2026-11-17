@@ -14,6 +14,7 @@ Reading ahead is allowed, but it spoils the puzzles.
 ```powershell
 . .\tools\devshell.ps1                 # puts cl, cmake, ninja on PATH (once per PowerShell session)
 cmake --workflow --preset release      # configure + build + test (or: debug presets for stepping)
+.\build\release\tools\render\fss_render.exe   # render the current lesson's sounds into renders\
 python tools\analyze\plot_spectrum.py renders\some.wav --peaks 10   # also: plot_wave.py, spectrogram.py
 ```
 The first configure downloads Catch2 (pinned by hash) into `build/`. Plots and renders go in `renders/` (git-ignored).
