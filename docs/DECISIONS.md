@@ -11,7 +11,7 @@ Status legend: `OPEN` (not yet faced) · `LEANING` (tentative, revisit at the na
 
 ---
 
-### D1. Synth type: `LEANING` → FM-core hybrid  *(CFS L0.4 confirmed the leaning, see Log; confirm at end of L1.5)*
+### D1. Synth type: `DECIDED` → FM-core hybrid  *(CFS: leaning in L0.4, confirmed at L1.5, see Log)*
 | Option | Learning payoff | Sound | Risk |
 |---|---|---|---|
 | Subtractive / VA | Anti-aliased oscillators, filter design (deep DSP) | Classic analog, intuitive | "Sounds like everything else" |
@@ -57,7 +57,7 @@ Either is fine; pick one and move on.
 - Multi-segment (MSEG, as in Vital and Serum): most flexible, and the most UI work.
 Recommendation: ADSR now, and generalize to multi-segment in Branch 4 if you want it.
 
-### D7. Operator count & routing model: `OPEN`  *(L1.5)*
+### D7. Operator count & routing model: `DECIDED` → 4 ops, free 4×4 matrix, 8 preset algorithms  *(L1.5, see Log)*
 - 4 ops / fixed algorithms (Digitone: 8; TX81Z: 8). 6 ops / 32 algorithms (DX7). 8 ops / free matrix (FM8).
 - **Recommendation:** 4 operators, stored internally as a **free modulation matrix**, with
   **algorithm presets** that just fill in the matrix. You get easy UX and full flexibility from one data structure.
@@ -240,6 +240,35 @@ time definition. MSEG remains the Branch 4 option.
 **The owner might choose differently if:** they find "time to −60 dB" less intuitive than "time to
 zero", or prefer linear attacks (which sound more "digital"/snappy). Both are one-line changes here.
 A DX-style 4-rate/4-level envelope is also a very reasonable FM-first choice.
+
+### 2026-11-17: D7 decided (CFS): 4 operators, free 4×4 modulation matrix, 8 preset algorithms
+**Decision.** `kNumOps = 4`. `Algorithm` = `mod[src][dst]` amounts (diagonal = self-feedback) + per-op
+carrier gains (presets: 1/N). Operators evaluate A→D each sample; forward edges use this sample's output,
+back edges (feedback, cycles) read the average of the source's last two outputs. The 8 TX81Z-family
+algorithms are `constexpr` data built from edge lists.
+**Options considered.** 4 ops / fixed algorithms in code (switch per algorithm); 6 ops / 32 algorithms (DX7);
+8 ops / free matrix (FM8); 4 ops / free matrix with presets (chosen).
+**Why.** One data structure serves both the "pick an algorithm" UX and a future free matrix (L4.1), and
+the evaluation rule makes *any* matrix legal (no graph sort, no forbidden cycles). At 4 operators the full
+16-entry matrix loop is trivial (zero entries are skipped), so data-driven costs nothing measurable, and
+tests prove the generic loop equals hand-wired chains *exactly*. 4 ops is enough for e-piano, bass, organ,
+bells and brass (all rendered), and it keeps 16 envelope knobs instead of 24.
+**Revisit if:** sound design keeps wanting a 5th/6th operator (DX7 patches); or profiling in L2.6/L6.2
+shows the generic matrix loop matters (specialize per preset with templates then).
+**The owner might choose differently if:** they prefer fixed algorithms written as code (simpler to read,
+one function per algorithm), or want DX7 compatibility (6 ops, 32 algorithms, patch import).
+
+### 2026-11-17: D1 confirmed (CFS): FM-core hybrid
+**Decision.** Keep FM operators as the core; the VA filter half follows in L1.9–L1.10.
+**Why.** Rendered and measured in L1.4–L1.5: bell, brass, clarinet, e-piano, FM bass, organ, feedback
+sweep. All behave as theory predicts (Bessel sidebands to 0.05 dB, feedback harmonics to 0.1–0.5 dB for
+β ≤ 1), and the patches cover the FM half of the target sounds with 4 operators. Nothing in Branch 1 argues
+for the pivot clause. Claude can't judge "fun to program", the criterion the pivot clause actually names.
+**Revisit if:** the owner, listening to the L1.5 renders, finds them unconvincing (that's the real test),
+or the filter lessons show the hybrid needs a different oscillator core.
+**The owner might choose differently if:** FM sound design in their own FSS felt like a fight rather
+than a puzzle. Then the pivot (2–3 VA oscillators into the same filter/amp/voice structure) is right
+for FSS even though CFS stays FM.
 
 <!-- Append entries like:
 ### 2026-11-20: D5 decided: double phase in [0,1)

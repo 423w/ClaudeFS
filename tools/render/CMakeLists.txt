@@ -14,5 +14,6 @@ add_executable(fss_render
     l1_1.cpp
     l1_2.cpp
     l1_3.cpp
-    l1_4.cpp)
+    l1_4.cpp
+    l1_5.cpp)
 target_link_libraries(fss_render PRIVATE fss::core fss::wav fss::warnings)

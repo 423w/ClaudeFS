@@ -10,3 +10,6 @@ renders/
 # python
 __pycache__/
 .venv/
+
+# Claude Code agent worktrees (temporary checkouts, never part of the repo)
+.claude/worktrees/
