@@ -16,6 +16,7 @@
 
 #include <fss/engine.h>
 #include <fss/synth/presets.h>
+#include <fss/util/realtime_guard.h>
 
 #include <algorithm>
 #include <array>
@@ -73,6 +74,7 @@ public:
 
     void render(float* out, std::uint32_t frames, std::uint32_t channels) noexcept override
     {
+        const util::RealtimeGuard rt; // the whole callback is real-time (L2.2); Debug builds trap allocations
         const Clock::time_point t0 = Clock::now();
         if (!firstCallbackSeen_) {
             origin_ = t0;
@@ -334,6 +336,8 @@ int run(int argc, char** argv)
         std::fprintf(stderr, "error: %s\n", device.lastError().c_str());
         return 1;
     }
+    // Debug builds link the allocation trap: make any audio-thread allocation stop the program on the spot.
+    util::setRealtimeTrapMode(util::RealtimeTrapMode::Abort);
     if (opt.keys)
         playKeys(*host, opt.seconds);
     else
@@ -341,6 +345,9 @@ int run(int argc, char** argv)
     device.stop();
 
     printStats(*host, info);
+    std::printf("rt trap:              %s, %llu violations\n",
+                util::realtimeTrapInstalled() ? "installed (Debug)" : "not linked (Release)",
+                static_cast<unsigned long long>(util::realtimeViolations()));
     return 0;
 }
 

@@ -188,7 +188,7 @@ Modes (tell Claude which one you want):
 
 ### Branch 2: Real-Time
 - [x] L2.1 Audio callbacks & latency
-- [ ] L2.2 The real-time rules
+- [x] L2.2 The real-time rules
 - [ ] L2.3 MIDI & lock-free queue
 - [ ] L2.4 Parameters & smoothing ★M3
 - [ ] L2.5 Playing it like an instrument

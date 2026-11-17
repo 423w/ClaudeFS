@@ -2,6 +2,8 @@
 // implementation belongs out of the header (faster builds for every host that includes engine.h).
 #include <fss/engine.h>
 
+#include <fss/util/realtime_guard.h>
+
 #include <algorithm>
 #include <cmath>
 
@@ -36,6 +38,8 @@ int Engine::busyVoices() const noexcept
 
 void Engine::process(std::span<const Event> events, float* outL, float* outR, int numFrames) noexcept
 {
+    // Everything below must obey docs/RT-RULES.md. The guard lets the allocation trap (L2.2) check it.
+    const util::RealtimeGuard rt;
     // The block-splitting loop: render up to each event, apply it, continue. Events at the same frame are
     // applied in list order with nothing rendered between them.
     int pos = 0;

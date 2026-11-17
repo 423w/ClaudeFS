@@ -61,7 +61,8 @@ version**, and **experiments to try**.
 - `core/` (`fss_core`) depends only on the standard library. No I/O, no OS calls, no framework types.
   Hosts (`tools/render`, `hosts/*`) adapt the outside world to the `fss::Engine` API.
 - **Real-time safety** in anything reachable from `process()`/`tick()`: no allocation, no locks, no I/O,
-  no exceptions, no unbounded loops. Allocate in `prepare()`. (Once it exists, `docs/RT-RULES.md` is the checklist.)
+  no exceptions, no unbounded loops. Allocate in `prepare()`. **[docs/RT-RULES.md](docs/RT-RULES.md) is the checklist**,
+  and `fss::util::RealtimeGuard` + the `fss_rt_trap` allocation trap enforce the allocation rule in tests and Debug hosts.
 - Primitive shape: `prepare(sampleRate)`, `reset()`, `tick(...)` per sample, block `process()` only when profiling justifies it.
 - `float` for audio samples. `double` or fixed point for phase and precision-sensitive state (see D5).
 - Units in names or types: `cutoffHz`, `attackMs`, `detuneCents`, `levelDb`. Phase units (cycles vs radians) are always documented.
