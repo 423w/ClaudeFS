@@ -1,0 +1,55 @@
+{
+  "version": 6,
+  "cmakeMinimumRequired": { "major": 3, "minor": 25, "patch": 0 },
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "description": "Ninja + the compiler on PATH (MSVC cl after tools/devshell.ps1). One build dir per preset.",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_EXPORT_COMPILE_COMMANDS": "ON"
+      }
+    },
+    {
+      "name": "debug",
+      "inherits": "base",
+      "displayName": "Debug",
+      "description": "No optimization, full debug info. For stepping through code, NOT for listening: DSP can run 10-50x slower.",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug" }
+    },
+    {
+      "name": "release",
+      "inherits": "base",
+      "displayName": "Release",
+      "description": "Fully optimized (/O2 /Ob2). Not RelWithDebInfo: with MSVC that uses /Ob1, which limits inlining and slows DSP code.",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
+    }
+  ],
+  "buildPresets": [
+    { "name": "debug",   "configurePreset": "debug" },
+    { "name": "release", "configurePreset": "release" }
+  ],
+  "testPresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "output": { "outputOnFailure": true },
+      "execution": { "noTestsAction": "error" }
+    },
+    { "name": "debug",   "inherits": "base", "configurePreset": "debug" },
+    { "name": "release", "inherits": "base", "configurePreset": "release" }
+  ],
+  "workflowPresets": [
+    {
+      "name": "release",
+      "description": "Configure, build and test Release in one command: cmake --workflow --preset release",
+      "steps": [
+        { "type": "configure", "name": "release" },
+        { "type": "build",     "name": "release" },
+        { "type": "test",      "name": "release" }
+      ]
+    }
+  ]
+}

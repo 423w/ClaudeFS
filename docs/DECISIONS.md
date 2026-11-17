@@ -37,11 +37,11 @@ Which DAW you use most decides the path:
 - **Pro Tools** needs AAX (avoid; heavy licensing).
 Recommendation: write CLAP by hand (most educational), and add VST3 via `clap-wrapper` if your DAW needs it.
 
-### D3. Build toolchain: `LEANING` → CMake + Ninja + MSVC (VS 2022 Build Tools), C++20  *(L0.3)*
+### D3. Build toolchain: `DECIDED` → CMake + Ninja + MSVC (VS 2022's own copies), C++20  *(L0.3, see Log)*
 Alternatives: clang-cl (better warnings, and sanitizers), Visual Studio IDE vs VS Code + clangd.
 Make sure it's CMake: every audio library and plugin SDK speaks it.
 
-### D4. Test framework: `OPEN`  *(L0.3)*
+### D4. Test framework: `DECIDED` → Catch2 v3 via FetchContent, pinned by hash  *(L0.3, see Log)*
 Catch2 v3 (built-in micro-benchmarks, rich matchers) vs doctest (tiny, very fast compile).
 Either is fine; pick one and move on.
 
@@ -126,6 +126,45 @@ Revisit if: FM sound design isn't fun by L1.5.
 Why: FL Studio (2024.1+) loads CLAP natively, so the hand-written CLAP plugin (L3.2) runs in the main DAW with no wrapper.
 VST3 (via clap-wrapper or JUCE, L3.3) moves toward the end of the project. A MIDI keyboard is available for Branch 2 onward.
 Revisit if: the main DAW changes, or a collaborator needs VST3 earlier.
+
+### 2026-11-17: D3 decided (CFS): CMake + Ninja + MSVC, from the VS 2022 install already on the machine
+**Decision.** CMake 3.31 and Ninja 1.12 as bundled with Visual Studio Community 2022 (17.14), the MSVC 19.44
+compiler (`cl`), C++20. `/W4 /permissive- /Zc:__cplusplus /utf-8 /WX` on CFS's own targets only (an
+`fss::warnings` INTERFACE target). Presets: `debug`, `release` (true `Release`, not `RelWithDebInfo`),
+plus a `release` workflow preset. `tools/devshell.ps1` loads the VS environment into PowerShell.
+**Options considered.** (a) MSVC + Ninja (chosen); (b) clang-cl + Ninja (better diagnostics, `-Wconversion`
+family, same ABI); (c) the Visual Studio generator (no environment setup needed, but multi-config,
+slower, and `cmake` still isn't on PATH without a dev shell); (d) installing standalone CMake/Ninja.
+**Why.** Everything needed was already installed, so zero installs. MSVC is what the owner's FSS
+targets and what most Windows plugin users' hosts are built with, and Ninja is fast and single-config,
+which keeps Debug and Release in separate folders (`build/debug`, `build/release`). The bundled CMake
+is new enough (3.31) for presets v6 and workflow presets.
+**Revisit if:** we want sanitizers beyond MSVC's ASan, or clearer template errors (try clang-cl via a
+`clang` preset; it needs the VS "C++ Clang tools" component); or CI on Linux/macOS (L6.1).
+**The owner might choose differently if:** they prefer working inside the Visual Studio IDE (the VS
+generator, or VS's "Open Folder" with these presets, which also works), want clang-cl's warnings from
+day one, or installed the standalone Build Tools + CMake as the curriculum suggests. Then `cmake` is on
+PATH globally and no dev-shell script is needed.
+
+### 2026-11-17: D4 decided (CFS): Catch2 v3 (3.8.1), via FetchContent, pinned by URL + SHA-256
+**Decision.** Catch2 v3.8.1 downloaded at configure time from its GitHub release tarball, verified
+by `URL_HASH SHA256=18b3f70a…`, linked as `Catch2::Catch2WithMain`; `catch_discover_tests` registers
+each `TEST_CASE` with CTest. (The owner approved the download in chat on 2026-11-17.)
+**Options considered.** Catch2 v3 (chosen); doctest (single header, compiles much faster); a
+hand-rolled micro-harness (no dependency at all); GoogleTest (heavier, less idiomatic for value tests).
+**Why.** Three Catch2 features will earn their keep in a DSP project:
+`GENERATE` for property tests over many inputs (the block-size invariance test, sample-rate sweeps);
+floating-point matchers (`WithinRel`, `WithinAbs`, `WithinULP`), which say *how* close is close
+enough; and `BENCHMARK` for the CPU work in L2.6/L6.2. The cost is a one-time ~110-step build of
+Catch2 itself (≈ 10–15 s here); after that, test rebuilds are just our files.
+**Why the hash.** A tag can be moved and a download can be corrupted. With the hash, a different
+tarball fails the configure loudly instead of quietly changing what we test with. (Trust-on-first-use:
+the hash was taken from the first HTTPS download.)
+**Revisit if:** test compile times start to hurt (doctest is a drop-in-ish switch), or offline/CI
+builds can't reach GitHub (vendor the tarball or use a local mirror via `FETCHCONTENT_SOURCE_DIR_CATCH2`).
+**The owner might choose differently if:** they value fast compiles and zero network access over
+features. doctest, vendored as one header, is a perfectly good answer for this project, and its
+`doctest::Approx` covers most float checks.
 
 <!-- Append entries like:
 ### 2026-11-20: D5 decided: double phase in [0,1)
