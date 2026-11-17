@@ -177,7 +177,7 @@ Modes (tell Claude which one you want):
 - [x] L1.1 Digital audio & WAV
 - [x] L1.2 Phase accumulator & sine
 - [x] L1.3 Envelopes
-- [ ] L1.4 Two-operator FM/PM ★M1
+- [x] L1.4 Two-operator FM/PM ★M1
 - [ ] L1.5 Operators, algorithms & feedback
 - [ ] L1.6 The note
 - [ ] L1.7 Voices, polyphony & the Engine ★M2

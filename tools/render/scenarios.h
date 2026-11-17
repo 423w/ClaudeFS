@@ -9,5 +9,6 @@ namespace fss::render {
 void renderL1_1(const std::filesystem::path& outDir); // l1_1.cpp: WAV writer checks, clipping, clicks
 void renderL1_2(const std::filesystem::path& outDir); // l1_2.cpp: phasor, glides, chord, phase precision
 void renderL1_3(const std::filesystem::path& outDir); // l1_3.cpp: ADSR envelopes, clicks
+void renderL1_4(const std::filesystem::path& outDir); // l1_4.cpp: two-operator FM, Chowning sounds
 
 } // namespace fss::render
