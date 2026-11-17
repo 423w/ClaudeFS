@@ -1,12 +1,13 @@
 # Decisions
 
-These are the human-in-the-loop points. Each one lists its options, the trade-offs, and a
-recommendation. **None is final until you mark it `DECIDED` and write your reasoning.**
-Claude should never decide one of these silently. It should present the entry, discuss it with you, and record the outcome.
+> **CFS note:** in this repo **Claude makes these calls**, plumbing decisions included, so the owner can compare
+> Claude's choices with their own in FSS. The owner's decisions made before the fork (D2, and D1's leaning) still bind.
+> Each Log entry adds one extra line: **The owner might choose differently if:** ...
+
+Each entry lists its options, the trade-offs, and a recommendation. When a decision is made, mark it `DECIDED`
+and append an entry to the **Log** at the bottom (date, decision, options considered, why, what would make you revisit).
 
 Status legend: `OPEN` (not yet faced) · `LEANING` (tentative, revisit at the named lesson) · `DECIDED`
-
-When you decide, append an entry to the **Log** at the bottom (date, decision, why, what would make you revisit).
 
 ---
 

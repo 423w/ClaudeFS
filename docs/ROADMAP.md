@@ -1,4 +1,8 @@
-# FirstStreetSynthesis: Roadmap
+# CFS: Roadmap
+
+> **CFS note:** this roadmap is copied unchanged from FirstStreetSynthesis so lesson numbers line up between
+> the two repos. Here Claude builds every lesson itself (build mode), and the **Progress** checklist at the bottom
+> tracks CFS, not the owner's FSS. Text below that says "you" means whoever is building: in this repo, Claude.
 
 This is the map for the project. It's a tree of lessons organized breadth-first: the trunk, then the
 big branches, then the lessons on each branch. Each lesson is one chunk of learning plus building, and

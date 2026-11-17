@@ -1,26 +1,35 @@
-# L<x.y>: <lesson title>
-*Date started / finished:*  ·  *Mode:* teach / pair / build
+# L<x.y>: <lesson title> (CFS)
+*Date started / finished:*  ·  *Built by:* Claude
 
-## What I set out to learn
-<!-- one or two sentences -->
+## Goal
+<!-- one or two sentences: what this lesson adds to the synth -->
 
 ## Predictions (before building)
-<!-- "I think the spectrum will show..." Write these BEFORE you render. -->
+<!-- what the spectrum / waveform / sound should look like, written BEFORE rendering -->
 
 ## What actually happened
-<!-- renders (paths in renders/), plots, surprises. Were the predictions right? -->
+<!-- renders (paths in renders/), plots, measurements. Were the predictions right? -->
 
-## Concepts in my own words
-<!-- explain the key idea as if teaching a friend; include a diagram if useful -->
+## How it works
+<!-- the key idea in plain words, with a diagram if useful; then a short tour of the files that changed -->
 
-## Code I wrote vs. code Claude wrote
-<!-- honest accounting: helps you see what you've truly internalized -->
+## Alternatives rejected
+<!-- other designs considered and why they lost. This is where the owner's version may differ. -->
+
+## What surprised me
+<!-- bugs, gotchas, things that sounded different than expected -->
+
+## Compare with your version
+<!-- specific things for the owner to look at in their FSS lesson: "how did you handle X?", "try Y in yours" -->
 
 ## Decisions made
 <!-- D-numbers and a one-line why; full entry goes in DECISIONS.md -->
 
-## Open questions / rabbit holes for later
+## Experiments to try
+<!-- 2–3 small code changes worth making and listening to -->
+
+## Open questions / for later
 -
 
-## Sounds I made
-<!-- the fun part: describe or link renders -->
+## Sounds
+<!-- describe or link renders -->
