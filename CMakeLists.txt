@@ -3,6 +3,7 @@
 # Layout (ARCHITECTURE.md §2):
 #   core/          fss_core: the DSP + synth library. Standard library only.
 #   tools/render/  offline CLI host (prints "hello" for now; renders WAVs from L1.1)
+#   hosts/standalone/ real-time host: plays through the audio device (L2.1, miniaudio)
 #   tests/         Catch2 unit tests (D4)
 #
 # Configure/build/test with the presets (run tools/devshell.ps1 first so cl, cmake and ninja are on PATH):
@@ -42,6 +43,18 @@ endif()
 
 add_subdirectory(core)
 add_subdirectory(tools/render)
+
+# The real-time host (L2.1). Default ON only on Windows, the platform it's developed and tested on;
+# miniaudio itself is cross-platform, so turning it on elsewhere should work but is untested.
+if(WIN32)
+    set(_fss_standalone_default ON)
+else()
+    set(_fss_standalone_default OFF)
+endif()
+option(FSS_BUILD_STANDALONE "Build hosts/standalone (fetches miniaudio, D9)" ${_fss_standalone_default})
+if(FSS_BUILD_STANDALONE)
+    add_subdirectory(hosts/standalone)
+endif()
 
 if(FSS_BUILD_TESTS)
     enable_testing()

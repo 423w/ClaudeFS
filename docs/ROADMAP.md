@@ -187,7 +187,7 @@ Modes (tell Claude which one you want):
 - [ ] L1.11 LFOs & basic modulation
 
 ### Branch 2: Real-Time
-- [ ] L2.1 Audio callbacks & latency
+- [x] L2.1 Audio callbacks & latency
 - [ ] L2.2 The real-time rules
 - [ ] L2.3 MIDI & lock-free queue
 - [ ] L2.4 Parameters & smoothing ★M3

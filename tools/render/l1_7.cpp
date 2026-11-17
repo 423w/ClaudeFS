@@ -9,41 +9,13 @@
 #include "render_util.h"
 #include "scenarios.h"
 
+#include <fss/synth/presets.h>
+
 #include <cstdio>
 
 namespace fss::render {
 
 namespace {
-
-using util::Ratio;
-
-synth::Patch epiano()
-{
-    synth::Patch p;
-    p.algorithm = synth::kAlgorithms[4]; // two stacks: tine (A>B) + body (C>D)
-    p.ops[0] = {.ratio = Ratio{14.0}, .level = 1.6f, .velSens = 0.9f, .keyLevelDbPerOct = 3.0f, .keyRateScale = 0.5f,
-                .env = {.attackMs = 1.0f, .decayMs = 180.0f, .sustain = 0.0f, .releaseMs = 100.0f}};
-    p.ops[1] = {.level = 0.6f, .velSens = 0.5f, .keyRateScale = 0.4f,
-                .env = {.attackMs = 1.0f, .decayMs = 1200.0f, .sustain = 0.0f, .releaseMs = 300.0f}};
-    p.ops[2] = {.level = 1.1f, .velSens = 0.7f, .keyLevelDbPerOct = 3.0f, .keyRateScale = 0.3f,
-                .env = {.attackMs = 1.0f, .decayMs = 1500.0f, .sustain = 0.25f, .releaseMs = 300.0f}};
-    p.ops[3] = {.level = 1.0f, .velSens = 0.4f, .keyRateScale = 0.3f,
-                .env = {.attackMs = 2.0f, .decayMs = 3000.0f, .sustain = 0.3f, .releaseMs = 400.0f}};
-    p.outputGain = 0.22f;
-    return p;
-}
-
-synth::Patch fmBass()
-{
-    synth::Patch p;
-    p.algorithm = synth::kAlgorithms[0];
-    p.algorithm.mod[2][2] = 0.9f; // C self-feedback: grit
-    p.ops[0].level = p.ops[1].level = 0.0f;
-    p.ops[2] = {.level = 2.2f, .velSens = 0.6f, .env = {.attackMs = 1.0f, .decayMs = 350.0f, .sustain = 0.25f, .releaseMs = 80.0f}};
-    p.ops[3] = {.level = 1.0f, .velSens = 0.3f, .env = {.attackMs = 2.0f, .decayMs = 800.0f, .sustain = 0.7f, .releaseMs = 60.0f}};
-    p.outputGain = 0.45f;
-    return p;
-}
 
 synth::Patch sinePad()
 {
@@ -68,8 +40,8 @@ void renderL1_7(const std::filesystem::path& dir)
     for (const ScoreNote& n : loadScore(scores / "l1_7_melody.txt"))
         keysScore.push_back(n);
     EngineRenderStats keyStats{};
-    StereoBuffer piece = renderWithEngine(epiano(), keysScore, {.tailMs = 2000.0}, &keyStats);
-    mixInto(piece, renderWithEngine(fmBass(), loadScore(scores / "l1_7_bass.txt"), {.tailMs = 2000.0}));
+    StereoBuffer piece = renderWithEngine(synth::presets::epiano(), keysScore, {.tailMs = 2000.0}, &keyStats);
+    mixInto(piece, renderWithEngine(synth::presets::fmBass(), loadScore(scores / "l1_7_bass.txt"), {.tailMs = 2000.0}));
     writeStereo(dir / "l1.7_piece.wav", piece);
     std::printf("  keys engine: max %d busy voices, %llu steals\n", keyStats.maxBusyVoices,
                 static_cast<unsigned long long>(keyStats.steals));

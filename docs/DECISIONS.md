@@ -66,7 +66,7 @@ Recommendation: ADSR now, and generalize to multi-segment in Branch 4 if you wan
 Voice count (8? 16? 32?), steal policy (oldest, quietest, same-key retrigger), and how fast
 a stolen voice fades out (avoids clicks).
 
-### D9. Standalone audio backend: `OPEN`  *(L2.1)*
+### D9. Standalone audio backend: `DECIDED` → miniaudio 0.11.23 (FetchContent, SHA-256 pinned), WASAPI shared or exclusive  *(L2.1, see Log)*
 - **miniaudio** (single header, MIT-0/public domain): fastest path. Recommended.
 - Raw **WASAPI**: COM, event-driven buffers, the real Windows plumbing. A great optional deep dive.
 - RtAudio / PortAudio: older, solid.
@@ -287,6 +287,20 @@ loud frames 30 vs 111. Same-key re-strike avoids a phase-reset click.
 16 notes (raise it); or quietest-first stealing sounds better live (L2.5 refines this, with sustain).
 **The owner might choose differently if:** they implement release-then-start (simpler, a few ms of
 delay is often unnoticeable), or prefer "quietest" stealing (needs a cheap per-voice level meter).
+
+### 2026-11-17: D9 decided (CFS): miniaudio
+**Decision.** miniaudio 0.11.23 (single header, public domain / MIT-0) fetched by FetchContent and pinned by
+SHA-256; implementation compiled once with its own warnings off; wrapped in an RAII `AudioDevice` (pimpl, so
+no miniaudio types leak) with a virtual `RenderCallback`. WASAPI shared by default, `--exclusive` for low latency.
+**Options considered.** miniaudio; raw WASAPI (COM, event-driven); RtAudio/PortAudio; JUCE's AudioDeviceManager.
+**Why.** One header, no build system to fight, cross-platform, and it exposes what the lesson is about
+(granted rate/period, share mode, fixed vs variable callbacks). Measured on the owner's machine (Realtek,
+WASAPI): shared mode forces 10 ms periods (≈ 35 ms latency); exclusive mode granted 80-frame periods
+(≈ 6.3 ms), with the engine using ≤ 5 % of each deadline. Raw WASAPI would teach COM, not audio.
+**Revisit if:** we need ASIO (pro interfaces), or exclusive mode misbehaves on other devices; raw WASAPI
+remains the stretch goal. In a plugin (Branch 3) the host owns the device and this goes away.
+**The owner might choose differently if:** they want the deep dive (raw WASAPI event-driven shared mode is
+the curriculum's stretch), or they already know JUCE.
 
 <!-- Append entries like:
 ### 2026-11-20: D5 decided: double phase in [0,1)
