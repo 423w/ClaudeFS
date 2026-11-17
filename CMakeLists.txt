@@ -55,6 +55,11 @@ endif()
 option(FSS_BUILD_STANDALONE "Build hosts/standalone (fetches miniaudio, D9)" ${_fss_standalone_default})
 if(FSS_BUILD_STANDALONE)
     add_subdirectory(hosts/standalone)
+    # L2.4 (D12): the dev control surface. Dear ImGui on Win32 + D3D11, so Windows only.
+    if(WIN32)
+        add_subdirectory(hosts/devui) # fss_devui: window, piano keyboard widget (fetches Dear ImGui)
+        add_subdirectory(hosts/play)  # fss_play: the playable synth = audio + MIDI + GUI + Engine
+    endif()
 endif()
 
 if(FSS_BUILD_TESTS)

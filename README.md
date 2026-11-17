@@ -15,7 +15,8 @@ Reading ahead is allowed, but it spoils the puzzles.
 . .\tools\devshell.ps1                 # puts cl, cmake, ninja on PATH (once per PowerShell session)
 cmake --workflow --preset release      # configure + build + test (or: debug presets for stepping)
 .\build\release\tools\render\fss_render.exe   # render the current lesson's sounds into renders\
-.\build\release\hosts\standalone\fss_standalone.exe --keys --exclusive --period 64 --seconds 60   # play live (L2.1)
+.\build\release\hosts\play\fss_play.exe --exclusive --period 64   # THE synth: GUI, mouse/QWERTY/MIDI, every parameter (L2.4)
+.\build\release\hosts\standalone\fss_standalone.exe --keys --exclusive --period 64 --seconds 60   # console host (L2.1-L2.3)
 python tools\analyze\plot_spectrum.py renders\some.wav --peaks 10   # also: plot_wave.py, spectrogram.py
 ```
 The first configure downloads Catch2 (pinned by hash) into `build/`. Plots and renders go in `renders/` (git-ignored).

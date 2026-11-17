@@ -13,6 +13,7 @@ inline Patch epiano()
     using util::Ratio;
     Patch p;
     p.algorithm = kAlgorithms[4];
+    p.algorithmNumber = 5;
     p.ops[0] = {.ratio = Ratio{14.0}, .level = 1.6f, .velSens = 0.9f, .keyLevelDbPerOct = 3.0f, .keyRateScale = 0.5f,
                 .env = {.attackMs = 1.0f, .decayMs = 180.0f, .sustain = 0.0f, .releaseMs = 100.0f}};
     p.ops[1] = {.level = 0.6f, .velSens = 0.5f, .keyRateScale = 0.4f,

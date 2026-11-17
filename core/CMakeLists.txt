@@ -10,6 +10,7 @@
 # for header-only.) Most primitives stay header-only so the compiler can inline them into voice loops.
 add_library(fss_core STATIC
     src/engine.cpp
+    src/params.cpp
     src/realtime_guard_stubs.cpp)
 add_library(fss::core ALIAS fss_core)
 

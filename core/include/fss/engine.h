@@ -14,6 +14,7 @@
 // costs neither a click (no instant cut) nor latency (the new note isn't delayed until the fade ends).
 #pragma once
 
+#include <fss/dsp/smoother.h>
 #include <fss/event.h>
 #include <fss/synth/patch.h>
 #include <fss/synth/voice.h>
@@ -33,7 +34,13 @@ public:
     void prepare(double sampleRate, int maxBlockSize, float stealFadeMs = 5.0f) noexcept;
     void reset() noexcept;
 
-    void setPatch(const synth::Patch& patch) noexcept { patch_ = patch; }
+    /// Replace the whole patch at once (no smoothing). Main thread, while audio is stopped, or offline.
+    /// While playing, change parameters with ParamChange events instead (L2.4): they're sample-accurate,
+    /// smoothed where it matters, and safe on the audio thread.
+    void setPatch(const synth::Patch& patch) noexcept;
+
+    /// A/B demos only: false makes every live parameter change jump (zipper noise). Call before prepare().
+    void setSmoothingEnabled(bool on) noexcept { smoothing_ = on; }
     [[nodiscard]] const synth::Patch& patch() const noexcept { return patch_; }
 
     /// Sounding-note limit, 1..kMaxPolyphony (tests and stress renders use small values).
@@ -49,14 +56,21 @@ public:
 
 private:
     void handle(const Event& e) noexcept;
+    void paramChange(const Event& e) noexcept;
     void noteOn(const Event& e) noexcept;
     void noteOff(const Event& e) noexcept;
     void render(float* outL, float* outR, int from, int to) noexcept;
+    void settleMatrix() noexcept;
     [[nodiscard]] synth::Voice* findFreeVoice() noexcept;
     [[nodiscard]] synth::Voice* chooseVictim() noexcept;
 
     std::array<synth::Voice, kNumVoices> voices_{};
-    synth::Patch patch_{};
+    synth::Patch patch_{};          // the target state: ParamChange events edit it in place
+    synth::Algorithm live_{};       // what voices actually use: patch_.algorithm, smoothed per sample
+    bool liveSettling_ = false;     // live_ still gliding toward patch_.algorithm?
+    float matrixK_ = 1.0f;          // one-pole coefficient for the matrix glide
+    dsp::OnePoleSmoother gain_{};   // output gain, smoothed per sample
+    bool smoothing_ = true;
     int polyphony_ = kMaxPolyphony;
     float bend_ = 0.0f;
     std::uint64_t noteCounter_ = 0, steals_ = 0;

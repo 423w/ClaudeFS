@@ -13,5 +13,6 @@ void renderL1_4(const std::filesystem::path& outDir); // l1_4.cpp: two-operator 
 void renderL1_5(const std::filesystem::path& outDir); // l1_5.cpp: 4-op voice, algorithms, feedback
 void renderL1_6(const std::filesystem::path& outDir); // l1_6.cpp: patch, velocity, key scaling, scores
 void renderL1_7(const std::filesystem::path& outDir); // l1_7.cpp: Engine, polyphony, stealing, the M2 piece
+void renderL2_4(const std::filesystem::path& outDir); // l2_4.cpp: parameter smoothing A/B (zipper noise)
 
 } // namespace fss::render

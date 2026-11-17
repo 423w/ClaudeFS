@@ -11,9 +11,9 @@ namespace fss::synth {
 
 class Voice {
 public:
-    void prepare(double sampleRate, float stealFadeMs) noexcept
+    void prepare(double sampleRate, float stealFadeMs, float levelSmoothingMs = 5.0f) noexcept
     {
-        fm_.prepare(sampleRate);
+        fm_.prepare(sampleRate, levelSmoothingMs);
         // Linear fade length; at least 1 sample so a "0 ms" fade is an instant cut, not a divide by zero.
         fadeStep_ = 1.0f / std::max(1.0f, stealFadeMs * 0.001f * static_cast<float>(sampleRate));
         reset();
@@ -55,10 +55,14 @@ public:
     }
 
     void setBend(float bend) noexcept { fm_.setBend(bend); }
+    void refreshFrequencies() noexcept { fm_.refreshFrequencies(); }
+    void refreshLevels() noexcept { fm_.refreshLevels(); }
+    void refreshEnvelopes() noexcept { fm_.refreshEnvelopes(); }
 
-    [[nodiscard]] float tick() noexcept
+    /// One sample under `alg`: the Engine's live (smoothed) copy of the patch's matrix (L2.4).
+    [[nodiscard]] float tick(const Algorithm& alg) noexcept
     {
-        float y = fm_.tick(patch_->algorithm);
+        float y = fm_.tick(alg);
         if (fading_) {
             fadeGain_ -= fadeStep_;
             if (fadeGain_ <= 0.0f) {
@@ -66,7 +70,7 @@ public:
                 busy_ = false; // silent: free the slot
             }
             y *= fadeGain_;
-        } else if (!fm_.isActive(patch_->algorithm)) {
+        } else if (!fm_.isActive(alg)) {
             busy_ = false; // release finished on its own
         }
         return y;

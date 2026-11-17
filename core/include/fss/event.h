@@ -16,6 +16,7 @@ struct Event {
         NoteOff,     // key (and noteId if ≥ 0)
         PitchBend,   // value = −1..1 (× the patch's bend range)
         AllNotesOff, // release everything (panic / transport stop)
+        ParamChange, // paramId, value = new PLAIN value (units of the param table, L2.4)
     };
 
     Type type = Type::NoteOn;
@@ -24,6 +25,7 @@ struct Event {
     std::uint8_t key = 60;     // MIDI key 0..127
     std::uint8_t channel = 0;
     float value = 0.0f;        // meaning depends on type (see above)
+    std::uint32_t paramId = 0; // ParamChange: a stable id from fss/synth/params.h
 
     // Small named constructors, so hosts read clearly: Event::noteOn(frame, key, velocity).
     static constexpr Event noteOn(std::uint32_t frame, std::uint8_t key, float velocity, std::int32_t id = -1)
@@ -35,6 +37,10 @@ struct Event {
         return {Type::NoteOff, frame, id, key, 0, 0.0f};
     }
     static constexpr Event pitchBend(std::uint32_t frame, float bend) { return {Type::PitchBend, frame, -1, 0, 0, bend}; }
+    static constexpr Event paramChange(std::uint32_t frame, std::uint32_t id, float plainValue)
+    {
+        return {Type::ParamChange, frame, -1, 0, 0, plainValue, id};
+    }
 };
 
 } // namespace fss

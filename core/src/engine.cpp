@@ -2,6 +2,7 @@
 // implementation belongs out of the header (faster builds for every host that includes engine.h).
 #include <fss/engine.h>
 
+#include <fss/synth/params.h>
 #include <fss/util/realtime_guard.h>
 
 #include <algorithm>
@@ -13,9 +14,24 @@ void Engine::prepare(double sampleRate, int /*maxBlockSize*/, float stealFadeMs)
 {
     // maxBlockSize is part of the contract (hosts promise never to exceed it) for buffers that later
     // lessons will preallocate here. Today's per-sample voices need none.
+    // Smoothing times come from the parameter table, the single source of truth (L2.4).
+    using synth::param_id::op;
+    const float levelMs = smoothing_ ? synth::findParam(op(0, synth::OpField::Level))->smoothingMs : 0.0f;
+    const float matrixMs = smoothing_ ? synth::findParam(synth::param_id::kAlgorithm)->smoothingMs : 0.0f;
+    const float gainMs = smoothing_ ? synth::findParam(synth::param_id::kOutputDb)->smoothingMs : 0.0f;
     for (synth::Voice& v : voices_)
-        v.prepare(sampleRate, stealFadeMs);
+        v.prepare(sampleRate, stealFadeMs, levelMs);
+    matrixK_ = matrixMs > 0.0f ? static_cast<float>(1.0 - std::exp(-1.0 / (matrixMs * 0.001 * sampleRate))) : 1.0f;
+    gain_.prepare(sampleRate, gainMs);
     reset();
+}
+
+void Engine::setPatch(const synth::Patch& patch) noexcept
+{
+    patch_ = patch;
+    live_ = patch.algorithm;
+    liveSettling_ = false;
+    gain_.reset(patch.outputGain);
 }
 
 void Engine::reset() noexcept
@@ -24,6 +40,9 @@ void Engine::reset() noexcept
         v.reset();
     bend_ = 0.0f;
     noteCounter_ = steals_ = 0;
+    live_ = patch_.algorithm;
+    liveSettling_ = false;
+    gain_.reset(patch_.outputGain);
 }
 
 void Engine::setPolyphony(int voices) noexcept
@@ -74,6 +93,43 @@ void Engine::handle(const Event& e) noexcept
     case Event::Type::AllNotesOff:
         for (synth::Voice& v : voices_)
             v.release();
+        break;
+    case Event::Type::ParamChange:
+        paramChange(e);
+        break;
+    }
+}
+
+void Engine::paramChange(const Event& e) noexcept
+{
+    const synth::ParamInfo* info = synth::findParam(e.paramId);
+    if (!info)
+        return; // unknown id (e.g. from a newer preset): ignore rather than guess
+    synth::setParam(patch_, *info, e.value);
+    // The patch now holds the new target. Who has to react, and how (see ParamTarget):
+    switch (info->target) {
+    case synth::ParamTarget::OpLevel:
+        for (synth::Voice& v : voices_)
+            if (v.busy())
+                v.refreshLevels(); // glides via each operator's smoother
+        break;
+    case synth::ParamTarget::OpFreq:
+    case synth::ParamTarget::Tuning:
+        for (synth::Voice& v : voices_)
+            if (v.busy())
+                v.refreshFrequencies(); // phase is continuous, so a pitch change never clicks
+        break;
+    case synth::ParamTarget::OpEnv:
+        for (synth::Voice& v : voices_)
+            if (v.busy())
+                v.refreshEnvelopes();
+        break;
+    case synth::ParamTarget::Feedback:
+    case synth::ParamTarget::Algorithm:
+        liveSettling_ = true; // render() glides live_ toward patch_.algorithm
+        break;
+    case synth::ParamTarget::Output:
+        gain_.setTarget(patch_.outputGain);
         break;
     }
 }
@@ -144,18 +200,43 @@ void Engine::render(float* outL, float* outR, int from, int to) noexcept
 {
     if (from >= to)
         return;
-    std::fill(outL + from, outL + to, 0.0f);
-    for (synth::Voice& v : voices_) {
-        if (!v.busy())
-            continue;
-        for (int i = from; i < to && v.busy(); ++i)
-            outL[i] += v.tick();
-    }
-    const float gain = patch_.outputGain;
+    // Sample by sample (since L2.4), because the modulation matrix can be gliding: every voice must see
+    // the same, current live_ matrix on each sample. Voices are summed in a fixed order, so the result
+    // does not depend on where blocks start (block-size invariance).
     for (int i = from; i < to; ++i) {
-        const float y = softClip(gain * outL[i]);
+        if (liveSettling_)
+            settleMatrix();
+        float sum = 0.0f;
+        for (synth::Voice& v : voices_)
+            if (v.busy())
+                sum += v.tick(live_);
+        const float y = softClip(gain_.tick() * sum);
         outL[i] = y;
         outR[i] = y; // mono voices for now; stereo spread comes with unison (L4.4)
+    }
+}
+
+void Engine::settleMatrix() noexcept
+{
+    // One-pole glide of all 20 matrix entries toward the patch. Switching algorithm therefore MORPHS
+    // the routing over ~50 ms instead of jumping (a jump in a modulation amount is a jump in phase:
+    // a click). When everything is within 1e-6, snap exactly and stop paying for it.
+    float maxDiff = 0.0f;
+    for (std::size_t s = 0; s < synth::kNumOps; ++s) {
+        for (std::size_t d = 0; d < synth::kNumOps; ++d) {
+            float& m = live_.mod[s][d];
+            const float diff = patch_.algorithm.mod[s][d] - m;
+            m += diff * matrixK_;
+            maxDiff = std::max(maxDiff, std::abs(diff));
+        }
+        float& c = live_.carrier[s];
+        const float diff = patch_.algorithm.carrier[s] - c;
+        c += diff * matrixK_;
+        maxDiff = std::max(maxDiff, std::abs(diff));
+    }
+    if (maxDiff < 1e-6f) {
+        live_ = patch_.algorithm;
+        liveSettling_ = false;
     }
 }
 

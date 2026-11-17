@@ -35,10 +35,15 @@ if(MSVC)
     target_compile_options(fss_miniaudio PRIVATE /w)
 endif()
 
-add_executable(fss_standalone
-    main.cpp
-    audio_device.cpp)
-target_link_libraries(fss_standalone PRIVATE fss::core fss::midi fss_miniaudio fss::warnings)
+# fss_audio: the RAII device wrapper, shared by every real-time host (fss_standalone, fss_play).
+add_library(fss_audio STATIC audio_device.cpp)
+add_library(fss::audio ALIAS fss_audio)
+target_include_directories(fss_audio PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
+target_compile_features(fss_audio PUBLIC cxx_std_20)
+target_link_libraries(fss_audio PRIVATE fss_miniaudio fss::warnings)
+
+add_executable(fss_standalone main.cpp)
+target_link_libraries(fss_standalone PRIVATE fss::core fss::midi fss::audio fss::warnings)
 # L2.2: Debug builds link the allocation trap, so any allocation on the audio thread aborts on the spot.
 # (Linking an OBJECT library passes its .obj straight to the linker, which is what makes the operator new
 # replacement take effect.) Release builds keep the C runtime's allocator untouched.

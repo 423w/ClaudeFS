@@ -27,7 +27,8 @@ add_executable(fss_tests
     test_realtime.cpp
     test_spsc_queue.cpp
     test_midi_parse.cpp
-    test_midi_stream.cpp)
+    test_midi_stream.cpp
+    test_params.cpp)
 # Catch2WithMain supplies main(), so test files contain only TEST_CASEs.
 # fss::warnings is linked here, but not to Catch2 itself (see the top-level CMakeLists.txt).
 target_link_libraries(fss_tests PRIVATE fss::core fss::wav fss::score fss::midi_message fss_rt_trap fss::warnings

@@ -78,6 +78,8 @@ public:
     {
         patch_ = &patch;
         key_ = note.key;
+        velocity_ = note.velocity;
+        bend_ = note.bend;
         for (int i = 0; i < kNumOps; ++i) {
             const OperatorParams& p = patch.ops[static_cast<std::size_t>(i)];
             Operator& o = ops_[static_cast<std::size_t>(i)];
@@ -91,19 +93,45 @@ public:
     /// Pitch bend while the note sounds: frequencies change, phases don't (no clicks, L1.2).
     void setBend(float bend) noexcept
     {
+        bend_ = bend;
+        refreshFrequencies();
+    }
+
+    // ---- live parameter changes while the note sounds (L2.4). The patch was edited in place by the
+    // Engine; these re-derive this note's operator settings from it. ----------------------------------
+    /// Ratio, detune, fixed mode, tuning, bend range: new frequencies; phases continue (no clicks).
+    void refreshFrequencies() noexcept
+    {
         if (!patch_)
             return;
         for (int i = 0; i < kNumOps; ++i)
             ops_[static_cast<std::size_t>(i)].setFrequency(
-                operatorFrequencyHz(*patch_, patch_->ops[static_cast<std::size_t>(i)], key_, bend));
+                operatorFrequencyHz(*patch_, patch_->ops[static_cast<std::size_t>(i)], key_, bend_));
+    }
+    /// Level, velocity sensitivity, key level: the new level is a *target*, reached by the operator's smoother.
+    void refreshLevels() noexcept
+    {
+        if (!patch_)
+            return;
+        for (int i = 0; i < kNumOps; ++i)
+            ops_[static_cast<std::size_t>(i)].setLevelSmoothed(
+                operatorLevel(patch_->ops[static_cast<std::size_t>(i)], key_, velocity_));
+    }
+    /// Envelope times/sustain and rate scaling: take effect immediately (sustain changes glide inside Adsr).
+    void refreshEnvelopes() noexcept
+    {
+        if (!patch_)
+            return;
+        for (int i = 0; i < kNumOps; ++i)
+            ops_[static_cast<std::size_t>(i)].setEnvelope(scaledEnvelope(patch_->ops[static_cast<std::size_t>(i)], key_));
     }
 
     [[nodiscard]] std::uint8_t key() const noexcept { return key_; }
 
-    void prepare(double sampleRate) noexcept
+    void prepare(double sampleRate, float levelSmoothingMs = 5.0f) noexcept
     {
         for (Operator& op : ops_)
-            op.prepare(sampleRate);
+            op.prepare(sampleRate, levelSmoothingMs);
     }
 
     void reset() noexcept
@@ -165,8 +193,9 @@ public:
     }
 
 private:
-    const Patch* patch_ = nullptr; // set by start(); read by setBend()
+    const Patch* patch_ = nullptr; // set by start(); read again by the refresh functions
     std::uint8_t key_ = 0;
+    float velocity_ = 1.0f, bend_ = 0.0f;
     std::array<Operator, kNumOps> ops_{};
     std::array<float, kNumOps> out_{}, prev_{}, prev2_{};
 };

@@ -289,7 +289,11 @@ void playKeys(EngineHost& host, double seconds)
 {
 #ifdef _WIN32
     // Virtual-key codes for two rows of a piano: the classic "tracker" layout.
-    constexpr std::pair<int, std::uint8_t> map[] = {
+    struct KeyMap {
+        int vk;           // Windows virtual-key code
+        std::uint8_t key; // MIDI key
+    };
+    constexpr KeyMap map[] = {
         {'Z', 48}, {'S', 49}, {'X', 50}, {'D', 51}, {'C', 52}, {'V', 53}, {'G', 54}, {'B', 55}, {'H', 56},
         {'N', 57}, {'J', 58}, {'M', 59}, {'Q', 60}, {'2', 61}, {'W', 62}, {'3', 63}, {'E', 64}, {'R', 65},
         {'5', 66}, {'T', 67}, {'6', 68}, {'Y', 69}, {'7', 70}, {'U', 71}};

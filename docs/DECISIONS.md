@@ -76,11 +76,11 @@ a stolen voice fades out (avoids clicks).
 WinMM `midiInOpen` by hand (simple C API on Windows 10; teaches callbacks and raw MIDI bytes) vs
 RtMidi / libremidi (cross-platform). Recommendation: WinMM by hand. It's small.
 
-### D11. Parameter communication: `OPEN`  *(L2.4)*
+### D11. Parameter communication: `DECIDED` → time-stamped ParamChange events through the SPSC queue  *(L2.4, see Log)*
 `std::atomic<float>` per parameter (simple; lossy for fast changes) vs an event queue (sample-accurate;
 what CLAP does anyway) vs both. Recommendation: event queue as the canonical path, since it matches CLAP.
 
-### D12. Dev control surface before the plugin GUI: `OPEN`  *(L2.4)*
+### D12. Dev control surface before the plugin GUI: `DECIDED` → Dear ImGui (generated from the param table) + MIDI CCs  *(L2.4, see Log)*
 MIDI CC knobs only / Dear ImGui window / terminal UI. Dear ImGui is quick and lets you build scopes early.
 
 ### D13. Plugin framework: `OPEN`  *(L3.1)*
@@ -314,6 +314,35 @@ host-independent, so the CLAP host (which also delivers raw MIDI 1.0 bytes) reus
 expression is wanted, or a device misbehaves under WinMM.
 **The owner might choose differently if:** they'd rather not touch Win32 at all (libremidi is a clean
 modern C++ choice), or they want macOS/Linux support for the standalone.
+
+### 2026-11-17: D11 decided (CFS): parameters travel as ParamChange events
+**Decision.** `Event::Type::ParamChange {paramId, plain value, frame}` through the same SPSC queue as notes.
+The Engine applies it at its exact frame: it edits its own Patch, then re-derives what the change touches
+(`ParamTarget`): operator levels glide (per-operator one-pole), the modulation matrix glides (so algorithm
+switches *morph*), output gain glides, and frequencies/envelopes update at once (phase stays continuous).
+The GUI keeps its own Patch copy; MIDI-CC-driven changes come back to it through an audio→GUI queue.
+**Options considered.** `std::atomic<float>` per parameter (simple, but lossy and block-quantized, with
+change detection by polling 56 atomics per block); events (chosen); both.
+**Why.** Sample-accurate and lossless (automation curves survive), exactly CLAP's model (L3.2 maps CLAP's
+param events 1:1), no polling, and it keeps block-size invariance: tested bit-exact with 80 random live
+parameter changes at block sizes 1/64/500/4096. Smoothing removes ~35 dB of zipper noise (measured).
+**Revisit if:** a host needs to *read* parameter values from the audio thread at high rates (meters,
+modulation display), in which case add atomics for read-back; or a 1024-event queue overflows with dense automation.
+**The owner might choose differently if:** they want the simplest thing that works (an atomic per param,
+read once per block): fine for a dev tool, and easy to upgrade later.
+
+### 2026-11-17: D12 decided (CFS): Dear ImGui dev UI + MIDI CC mapping
+**Decision.** `fss_play`: Dear ImGui 1.91.9b (pinned), Win32 + D3D11, per-monitor DPI aware. All sliders are
+generated from `kParams` (normalized slider space, so Exp/Power2 skews feel right; right-click = default),
+preset buttons send a whole patch as ParamChange events, an on-screen + QWERTY piano, meters. MIDI CCs are
+mapped through the table's `midiCC` field (74, 71, 1, 7) and the sliders follow the hardware knobs.
+**Options considered.** MIDI CCs only; Dear ImGui (chosen, plus CCs); a terminal UI.
+**Why.** Every one of 56 parameters is reachable today without writing a single widget by hand (the grid
+*is* the table), and ImGui will host scopes/spectra early (L3.6). CCs make it an instrument with a
+controller. The shell was built by a subagent in parallel, then extended.
+**Revisit if:** the plugin GUI (D14, L3.5) wants the same toolkit, in which case ImGui inside the CLAP window is a natural path.
+**The owner might choose differently if:** they'd rather stay "headless" with a cheap MIDI controller
+(fewer moving parts), or want to start the real GUI technology now.
 
 <!-- Append entries like:
 ### 2026-11-20: D5 decided: double phase in [0,1)

@@ -1,6 +1,7 @@
 // Tests for the real-time guard and allocation trap (L2.2), and the audit they enable: the Engine must
 // never allocate or free inside process(), under heavy playing (stealing, bends, retriggers, panics).
 #include <fss/engine.h>
+#include <fss/synth/params.h>
 #include <fss/synth/presets.h>
 #include <fss/util/realtime_guard.h>
 
@@ -62,7 +63,7 @@ TEST_CASE("Engine::process never allocates or frees, under heavy random playing"
     std::vector<Event> events;
     events.reserve(64);        // the *test* must not allocate inside the loop either (it's not guarded, but tidy)
     std::mt19937 rng(99);
-    std::uniform_int_distribution<int> key(30, 100), kind(0, 9), frame(0, 511);
+    std::uniform_int_distribution<int> key(30, 100), kind(0, 11), frame(0, 511);
     std::uniform_real_distribution<float> val(-1.0f, 1.0f);
 
     util::resetRealtimeViolations();
@@ -76,7 +77,12 @@ TEST_CASE("Engine::process never allocates or frees, under heavy random playing"
             case 4: case 5: case 6: events.push_back(Event::noteOff(f, k)); break;
             case 7: events.push_back(Event::pitchBend(f, val(rng))); break;
             case 8: events.push_back(Event::noteOn(f, k, 0.0f)); break; // velocity 0 = note-off
-            default: events.push_back({Event::Type::AllNotesOff, f}); break;
+            case 9: events.push_back({Event::Type::AllNotesOff, f}); break;
+            default: { // L2.4: live parameter changes of every kind (levels, algorithm, envelopes, ratios...)
+                const auto& p = synth::kParams[static_cast<std::size_t>(k) % synth::kParams.size()];
+                events.push_back(Event::paramChange(f, p.id, synth::fromNormalized(p, 0.5f + 0.5f * val(rng))));
+                break;
+            }
             }
         }
         std::sort(events.begin(), events.end(), [](const Event& a, const Event& b) { return a.frame < b.frame; });

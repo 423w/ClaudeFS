@@ -40,6 +40,7 @@ struct OperatorParams {
 
 struct Patch {
     Algorithm algorithm = kAlgorithms[0]; // a copy: feedback (diagonal) is part of the patch
+    std::uint8_t algorithmNumber = 1;      // which preset `algorithm` came from (1..8), for the param table
     std::array<OperatorParams, kNumOps> ops{};
     util::Hz tuningA4{440.0};
     util::Semitones bendRange{2.0};       // full pitch-bend wheel deflection
