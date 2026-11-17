@@ -169,7 +169,7 @@ Modes (tell Claude which one you want):
 
 ### Branch 0: Orientation
 - [x] L0.1 Listening & vocabulary
-- [ ] L0.2 Just-enough math
+- [x] L0.2 Just-enough math
 - [ ] L0.3 Toolchain & repo skeleton
 - [ ] L0.4 Choose your synth (D1, D2)
 
