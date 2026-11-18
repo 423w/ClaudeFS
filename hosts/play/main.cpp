@@ -1,6 +1,7 @@
 // fss_play (L2.4, milestone M3): the synth you can play and tweak.
 //
-//   fss_play [--exclusive] [--period FRAMES] [--frames N] [--demo]
+//   fss_play [--exclusive] [--period FRAMES] [--frames N] [--demo | --demo16]
+//       --demo16 (L2.6): loads the FM pad at -30 dB, holds 16 notes, and prints the DSP load to the console
 //
 //   - Audio: the default output device (WASAPI; --exclusive --period 64 for ~6 ms latency, see L2.1).
 //   - Notes: mouse on the on-screen piano, the computer keyboard (Z..M / Q..U rows), and EVERY MIDI input
@@ -101,6 +102,7 @@ public:
     [[nodiscard]] float peak() const noexcept { return peak_.load(std::memory_order_relaxed); }
     [[nodiscard]] int voices() const noexcept { return voices_.load(std::memory_order_relaxed); }
     [[nodiscard]] float load() const noexcept { return load_.load(std::memory_order_relaxed); }
+    [[nodiscard]] float loadPeak() const noexcept { return loadPeak_.load(std::memory_order_relaxed); }
     [[nodiscard]] int droppedUi() const noexcept { return droppedUi_; }
 
     // ---- audio thread -----------------------------------------------------------------------------
@@ -137,9 +139,21 @@ public:
         // Meters for the GUI. Peak "decays" on the GUI side by taking the max with the previous value.
         peak_.store(std::max(peak, peak_.load(std::memory_order_relaxed) * 0.9f), std::memory_order_relaxed);
         voices_.store(engine_.busyVoices(), std::memory_order_relaxed);
+        // DSP load (L2.6) = time spent in this callback / the callback's duration. 100 % means the deadline
+        // was just met; anything above is a dropout. The AVERAGE (one-pole, ~0.5 s) says how much headroom
+        // there is; the PEAK over the last second is what matters for dropouts (worst case, not typical case).
         const double budget = static_cast<double>(frames) / sampleRateGuess_;
         const double used = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
-        load_.store(static_cast<float>(used / budget), std::memory_order_relaxed);
+        const auto now = static_cast<float>(used / budget);
+        loadAvg_ += (now - loadAvg_) * 0.02f;
+        load_.store(loadAvg_, std::memory_order_relaxed);
+        windowPeak_ = std::max(windowPeak_, now);
+        windowFrames_ += frames;
+        if (windowFrames_ >= sampleRateGuess_) { // publish once a second, then start a new window
+            loadPeak_.store(windowPeak_, std::memory_order_relaxed);
+            windowPeak_ = 0.0f;
+            windowFrames_ = 0;
+        }
     }
 
     void setSampleRate(double sr) noexcept { sampleRateGuess_ = sr; }
@@ -175,7 +189,9 @@ private:
     std::array<midi::MidiInputWinmm, kMaxMidiInputs> midi_{};
     std::size_t midiCount_ = 0;                  // fixed before audio starts, so a plain size_t is fine
     std::vector<std::string> midiNames_;         // GUI thread only
-    std::atomic<float> peak_{0.0f}, load_{0.0f};
+    std::atomic<float> peak_{0.0f}, load_{0.0f}, loadPeak_{0.0f};
+    float loadAvg_ = 0.0f, windowPeak_ = 0.0f; // audio thread only
+    double windowFrames_ = 0.0;               // audio thread only
     std::atomic<int> voices_{0};
     static_assert(std::atomic<float>::is_always_lock_free);
     int droppedUi_ = 0;                          // GUI thread only
@@ -332,7 +348,8 @@ void drawMain(synth::Patch& patch, PlayHost& host, const standalone::DeviceInfo&
     ImGui::SameLine(ImGui::GetFontSize() * 6.5f);
     ImGui::ProgressBar(std::clamp((peakDb + 60.0f) / 60.0f, 0.0f, 1.0f), ImVec2(-1, 0),
                        peakDb > -59.0f ? (std::to_string(static_cast<int>(peakDb)) + " dB").c_str() : "-inf");
-    ImGui::Text("Voices %2d / %d   CPU %4.1f %%", host.voices(), Engine::kMaxPolyphony, 100.0f * host.load());
+    ImGui::Text("Voices %2d / %d   DSP load %4.1f %% (peak %4.1f %% in 1 s)", host.voices(), Engine::kMaxPolyphony,
+                100.0f * host.load(), 100.0f * host.loadPeak());
     ImGui::TextDisabled("%s, %u Hz, %u x %u frames, ~%.1f ms", info.backendName.c_str(), info.sampleRateHz,
                         info.internalPeriodFrames, info.internalPeriods, latencyMs);
     if (host.midiNames().empty())
@@ -388,6 +405,7 @@ int run(int argc, char** argv)
     standalone::DeviceConfig cfg;
     long frameLimit = -1;
     bool demo = false; // --demo: play a chord through the normal event path (smoke test without a human)
+    bool demo16 = false; // --demo16: 16 voices of a full patch, load printed (the M4 budget check, L2.6)
     for (int i = 1; i < argc; ++i) {
         const std::string_view a = argv[i];
         if (a == "--exclusive") {
@@ -398,8 +416,10 @@ int run(int argc, char** argv)
             ++i;
         } else if (a == "--demo") {
             demo = true;
+        } else if (a == "--demo16") {
+            demo16 = true;
         } else {
-            std::fprintf(stderr, "usage: fss_play [--exclusive] [--period FRAMES] [--frames N] [--demo]\n");
+            std::fprintf(stderr, "usage: fss_play [--exclusive] [--period FRAMES] [--frames N] [--demo | --demo16]\n");
             return 2;
         }
     }
@@ -439,6 +459,24 @@ int run(int argc, char** argv)
         if (demo && (frame == 30 || frame == 150))
             for (std::uint8_t k : {std::uint8_t{57}, std::uint8_t{60}, std::uint8_t{64}, std::uint8_t{69}})
                 frame == 30 ? host->noteOn(k, 0.8f) : host->noteOff(k);
+        if (demo16) {
+            if (frame == 10) { // the FM pad (4 ops, filter, filter env, vibrato, LFO 2 on cutoff + index), quietly
+                loadPatch(guiPatch, synth::presets::evolvingPad(), *host);
+                guiPatch.routes.vibratoSemitones = 0.3f; // make sure the per-sample pitch path is busy
+                host->post(Event::paramChange(0, synth::param_id::kVibrato, 0.3f));
+                host->post(Event::paramChange(0, synth::param_id::kOutputDb, -30.0f));
+                synth::setParam(guiPatch, *synth::findParam(synth::param_id::kOutputDb), -30.0f);
+            }
+            if (frame == 20)
+                for (int i = 0; i < 16; ++i)
+                    host->noteOn(static_cast<std::uint8_t>(40 + 2 * i), 0.8f);
+            if (frame == 200 || frame == 260)
+                std::printf("demo16: frame %ld, %d voices, DSP load %.1f %% avg, %.1f %% peak (last 1 s)\n", frame,
+                            host->voices(), 100.0 * host->load(), 100.0 * host->loadPeak());
+            if (frame == 270)
+                for (int i = 0; i < 16; ++i)
+                    host->noteOff(static_cast<std::uint8_t>(40 + 2 * i));
+        }
         GuiMessage m;
         while (host->popGui(m)) {
             if (m.kind == GuiMessage::Kind::Param) {

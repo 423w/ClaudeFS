@@ -44,6 +44,8 @@ public:
 
     /// A/B demos only: false makes every live parameter change jump (zipper noise). Call before prepare().
     void setSmoothingEnabled(bool on) noexcept { smoothing_ = on; }
+    /// A/B demos only (L2.6): false leaves the thread's denormal mode alone inside process().
+    void setFlushDenormals(bool on) noexcept { flushDenormals_ = on; }
     [[nodiscard]] const synth::Patch& patch() const noexcept { return patch_; }
 
     /// Sounding-note limit, 1..kMaxPolyphony (tests and stress renders use small values).
@@ -62,6 +64,7 @@ public:
     [[nodiscard]] bool sustainPedal() const noexcept { return sustainPedal_; }
 
 private:
+    void processEvents(std::span<const Event> events, float* outL, float* outR, int numFrames) noexcept;
     void handle(const Event& e) noexcept;
     void paramChange(const Event& e) noexcept;
     void noteOn(const Event& e) noexcept;
@@ -89,6 +92,7 @@ private:
     dsp::OnePoleSmoother modWheel_{};
     synth::Algorithm indexScaled_{}; // live_ with every modulation amount scaled by LFO 2 (when routed)
     bool smoothing_ = true;
+    bool flushDenormals_ = true;
     int polyphony_ = kMaxPolyphony;
     double sampleRate_ = 48000.0;
     float bend_ = 0.0f;

@@ -3,6 +3,7 @@
 #include <fss/engine.h>
 
 #include <fss/synth/params.h>
+#include <fss/util/denormal_guard.h>
 #include <fss/util/realtime_guard.h>
 
 #include <algorithm>
@@ -91,6 +92,18 @@ void Engine::process(std::span<const Event> events, float* outL, float* outR, in
 {
     // Everything below must obey docs/RT-RULES.md. The guard lets the allocation trap (L2.2) check it.
     const util::RealtimeGuard rt;
+    // FTZ/DAZ for the duration of this call (L2.6): decaying tails must never fall into the CPU's slow
+    // denormal path. RAII restores the host's MXCSR on the way out. Off only for the L2.6 A/B demo.
+    if (flushDenormals_) {
+        const util::DenormalGuard ftz;
+        processEvents(events, outL, outR, numFrames);
+    } else {
+        processEvents(events, outL, outR, numFrames);
+    }
+}
+
+void Engine::processEvents(std::span<const Event> events, float* outL, float* outR, int numFrames) noexcept
+{
     // The block-splitting loop: render up to each event, apply it, continue. Events at the same frame are
     // applied in list order with nothing rendered between them.
     int pos = 0;

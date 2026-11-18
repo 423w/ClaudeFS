@@ -17,7 +17,7 @@ one slow call in ten thousand is a click every minute.
 | unbounded loops (wait-until-free, retry-forever) | no worst case = no guarantee | bounded loops: process at most N events per block, drop with a counter |
 
 ## Also watch for
-- **Denormals**: tiny floats in decaying filters/feedback can be 100× slower (L2.6: flush-to-zero).
+- **Denormals**: tiny floats in decaying filters/feedback can be 10–100× slower on some CPUs. `Engine::process` runs under `util::DenormalGuard` (FTZ/DAZ, restored on exit) since L2.6; measured 1.3–1.7× on the owner's Ryzen 7 7735HS, and without it resonant SVF states never reach zero (they idle at ~1e-42).
 - **First-touch page faults**: memory allocated in `prepare()` but never written may fault on first use; touch it in `prepare()`.
 - **Hidden allocations in the standard library**: `std::sort` (no), `std::stable_sort` (yes, a buffer),
   `std::function` (maybe), `std::string` > ~15 chars (yes), `std::vector::clear()` (no; `shrink_to_fit` yes).

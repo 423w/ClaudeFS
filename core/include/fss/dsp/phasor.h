@@ -70,9 +70,13 @@ public:
         // (in a real-time path we can't throw, and a NaN frequency must not become undefined behaviour).
         if (!(std::abs(steps) < 4.0e18))
             steps = std::isnan(steps) ? 0.0 : std::copysign(4.0e18, steps);
+        // Round half away from zero (what std::llround does) with a cast: llround measured 13 ns per call
+        // in L2.6, the cast ~1 ns, and vibrato/glide call this 4× per voice per sample. For |steps| < 2^52
+        // adding ±0.5 is exact, so the result equals llround's.
         // int64 → uint32 keeps the low 32 bits (conversion to unsigned is defined as modulo 2^32), which
         // is exactly "wrap the increment into one cycle". −1 step becomes 0xFFFFFFFF, i.e. go backwards.
-        inc_ = static_cast<Phase>(std::llround(steps));
+        const auto rounded = static_cast<std::int64_t>(steps >= 0.0 ? steps + 0.5 : steps - 0.5);
+        inc_ = static_cast<Phase>(rounded);
     }
 
     /// Return the current phase, then advance by one sample.

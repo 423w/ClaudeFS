@@ -220,7 +220,7 @@ private:
     {
         if (!patch_)
             return;
-        const double r = std::exp2(static_cast<double>(pitchOffset_) / 12.0);
+        const double r = util::pow2(static_cast<double>(pitchOffset_) / 12.0); // per sample: the fast exp (L2.6)
         for (std::size_t i = 0; i < kNumOps; ++i)
             ops_[i].setPitchRatio(patch_->ops[i].fixed ? 1.0 : r);
     }

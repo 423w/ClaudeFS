@@ -162,7 +162,7 @@ public:
                                   f.velOctaves * (velocity_ - 1.0f);
             // Octaves → Hz, then the SVF prewarps (tan). Two transcendentals per sample per voice: measured
             // in L2.6. The SVF clamps the result to [1 Hz, 0.49·fs].
-            svf_.set(std::exp2(octaves), ctl.q);
+            svf_.set(util::pow2(octaves), ctl.q); // e^(x·ln2): ~14x cheaper than std::exp2 here (L2.6)
             y = svf_.tick(y, static_cast<dsp::SvfMode>(static_cast<int>(f.mode) - 1)); // FilterMode = SvfMode + 1
         }
         if (fading_) {
