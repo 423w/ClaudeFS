@@ -198,7 +198,7 @@ Modes (tell Claude which one you want):
 - [x] L3.1 The host/plugin contract
 - [x] L3.2 CLAP by hand
 - [ ] L3.3 VST3 / every DAW
-- [ ] L3.4 State & presets
+- [x] L3.4 State & presets
 - [ ] L3.5 GUI I ★M5
 - [ ] L3.6 GUI II: FFT & analyzer
 

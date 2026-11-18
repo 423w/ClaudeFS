@@ -32,7 +32,9 @@ add_executable(fss_render
     l2_4.cpp
     l2_5.cpp
     l2_6.cpp
+    l3_4.cpp
     engine_render.cpp)
 target_link_libraries(fss_render PRIVATE fss::core fss::wav fss::score fss::warnings)
 # Score files live in the source tree; bake their absolute path in so fss_render works from any folder.
-target_compile_definitions(fss_render PRIVATE FSS_SCORES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/scores")
+target_compile_definitions(fss_render PRIVATE FSS_SCORES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/scores"
+    FSS_PRESETS_DIR="${PROJECT_SOURCE_DIR}/presets/factory") # l3.4 writes the factory bank there

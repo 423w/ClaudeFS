@@ -31,6 +31,7 @@
 #include <atomic>
 #include <bitset>
 #include <cstdint>
+#include <string>
 
 namespace fss::plugin {
 
@@ -71,6 +72,8 @@ public:
     const synth::Patch& mainPatch();
     /// Replace the whole patch from the main thread (state load, presets): no gestures, no host recording.
     void applyPatchFromMain(const synth::Patch& patch);
+    [[nodiscard]] const std::string& presetName() const noexcept { return presetName_; }
+    void setPresetName(std::string name) { presetName_ = std::move(name); }
     [[nodiscard]] float meterPeak() const noexcept { return peak_.load(std::memory_order_relaxed); }
     [[nodiscard]] int meterVoices() const noexcept { return voices_.load(std::memory_order_relaxed); }
 
@@ -100,6 +103,7 @@ private:
     const clap_host_params* hostParams_ = nullptr;
     const clap_host_log* hostLog_ = nullptr;
     synth::Patch mirror_{};
+    std::string presetName_;               // saved with the state; shown by the editor (L3.5)
     std::array<bool, kNumParams> gesture_{};
     bool active_ = false;
 

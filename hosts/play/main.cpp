@@ -23,6 +23,7 @@
 #include "keyboard.h"
 #include "midi_input_winmm.h"
 #include "midi_stream.h"
+#include "preset_library.h"
 
 #include <fss/engine.h>
 #include <fss/synth/params.h>
@@ -276,12 +277,44 @@ void drawMain(synth::Patch& patch, PlayHost& host, const standalone::DeviceInfo&
     ImGui::TextDisabled("Claude's FirstStreetSynthesis - dev surface (param table)");
     ImGui::Separator();
 
-    ImGui::Text("Presets");
-    for (const synth::presets::NamedPreset& pr : synth::presets::kFactoryPresets) {
-        if (ImGui::Button(pr.name))
-            loadPatch(patch, pr.make(), host);
-        ImGui::SameLine();
+    // Presets (L3.4): the factory bank (embedded .cfspatch files) and the user's folder, Documents\CFS Presets.
+    static std::vector<preset_lib::PresetEntry> list = preset_lib::listPresets();
+    static int current = -1;
+    static char saveName[96] = "";
+    static std::string status;
+    ImGui::SeparatorText("Presets");
+    ImGui::SetNextItemWidth(-ImGui::GetFontSize() * 4.5f);
+    const char* preview = (current >= 0 && current < static_cast<int>(list.size())) ? list[static_cast<std::size_t>(current)].name.c_str()
+                                                                                     : "(choose a preset)";
+    if (ImGui::BeginCombo("##preset", preview)) {
+        for (std::size_t i = 0; i < list.size(); ++i) {
+            if (i > 0 && list[i - 1].factory && !list[i].factory)
+                ImGui::SeparatorText("yours");
+            if (ImGui::Selectable(list[i].name.c_str(), static_cast<int>(i) == current)) {
+                synth::Patch loaded;
+                std::string name;
+                if (preset_lib::loadPreset(list[i], loaded, name, status)) {
+                    loadPatch(patch, loaded, host);
+                    current = static_cast<int>(i);
+                    std::snprintf(saveName, sizeof saveName, "%s", name.c_str());
+                    status = "loaded " + name;
+                }
+            }
+        }
+        ImGui::EndCombo();
     }
+    ImGui::SameLine();
+    if (ImGui::Button("Rescan"))
+        list = preset_lib::listPresets();
+    ImGui::SetNextItemWidth(-ImGui::GetFontSize() * 4.5f);
+    ImGui::InputTextWithHint("##name", "preset name", saveName, sizeof saveName);
+    ImGui::SameLine();
+    if (ImGui::Button("Save") && preset_lib::savePreset(patch, saveName, status)) {
+        status = std::string("saved \"") + saveName + "\" in Documents\\CFS Presets";
+        list = preset_lib::listPresets();
+    }
+    if (!status.empty())
+        ImGui::TextDisabled("%s", status.c_str());
     if (ImGui::Button("Panic"))
         host.post({Event::Type::AllNotesOff});
 

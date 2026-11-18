@@ -11,6 +11,7 @@
 #include "score.h"
 
 #include <fss/synth/fm_voice.h>
+#include <fss/util/math.h>
 
 #include <cmath>
 #include <vector>
@@ -35,7 +36,7 @@ std::vector<float> renderScore(const synth::Patch& patch, const std::vector<Scor
         for (std::size_t i = start; i < n; ++i) {
             if (i == off)
                 v.noteOff();
-            out[i] += patch.outputGain * v.tick(patch.algorithm);
+            out[i] += util::dbToGain(patch.outputDb) * v.tick(patch.algorithm);
         }
     }
     return out;
@@ -62,7 +63,7 @@ synth::Patch keysPatch(bool keyScaling)
         mod.keyRateScale = 0.5f;     // and both envelopes run faster up high (×0.71 per octave)
         car.keyRateScale = 0.5f;
     }
-    p.outputGain = 0.4f;
+    p.outputDb = util::gainToDb(0.4f);
     return p;
 }
 

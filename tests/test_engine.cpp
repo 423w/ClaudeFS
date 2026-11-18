@@ -1,5 +1,6 @@
 // Tests for fss/engine.h (L1.7): sample accuracy, block-size invariance, allocation and stealing.
 #include <fss/engine.h>
+#include <fss/util/math.h>
 
 #include <catch2/catch_test_macros.hpp>
 
@@ -32,7 +33,7 @@ synth::Patch testPatch()
     p.lfo1 = {.rateHz = 5.5f, .shape = dsp::LfoShape::Triangle, .delayMs = 30.0f, .fadeMs = 50.0f, .keySync = false};
     p.lfo2 = {.rateHz = 3.0f, .shape = dsp::LfoShape::SampleHold, .keySync = true};
     p.routes = {.vibratoSemitones = 0.3f, .wheelVibratoSemitones = 0.5f, .lfo2CutoffOctaves = 1.5f, .lfo2IndexAmount = 0.4f};
-    p.outputGain = 0.3f;
+    p.outputDb = util::gainToDb(0.3f);
     return p;
 }
 

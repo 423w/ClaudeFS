@@ -14,7 +14,7 @@ float getParam(const Patch& patch, const ParamInfo& p) noexcept
         const FilterParams& f = patch.filter;
         switch (p.id) {
         case param_id::kAlgorithm: return static_cast<float>(patch.algorithmNumber);
-        case param_id::kOutputDb: return util::gainToDb(patch.outputGain);
+        case param_id::kOutputDb: return patch.outputDb;
         case param_id::kTuningA4: return static_cast<float>(patch.tuningA4.value);
         case param_id::kBendRange: return static_cast<float>(patch.bendRange.value);
         case param_id::kFilterMode: return static_cast<float>(f.mode);
@@ -81,7 +81,7 @@ void setParam(Patch& patch, const ParamInfo& p, float plain) noexcept
             patch.algorithm = next;
             return;
         }
-        case param_id::kOutputDb: patch.outputGain = util::dbToGain(v); return;
+        case param_id::kOutputDb: patch.outputDb = v; return; // stored as dB: exact (L3.4)
         case param_id::kTuningA4: patch.tuningA4 = util::Hz{v}; return;
         case param_id::kBendRange: patch.bendRange = util::Semitones{v}; return;
         case param_id::kFilterMode: f.mode = static_cast<FilterMode>(static_cast<int>(v)); return;

@@ -15,7 +15,7 @@
 cmake_minimum_required(VERSION 3.25)
 
 project(CFS
-    VERSION 0.3.2 # branch.lesson of the last finished lesson; the plugin reports it to the host
+    VERSION 0.3.4 # branch.lesson of the last finished lesson; the plugin reports it to the host
     DESCRIPTION "Claude's build of FirstStreetSynthesis, an FM-core hybrid synth"
     LANGUAGES CXX)
 
@@ -45,6 +45,7 @@ endif()
 add_subdirectory(core)
 add_subdirectory(tools/render)
 add_subdirectory(hosts/midi) # L2.3: MidiMessage everywhere; WinMM input + monitor on Windows only
+add_subdirectory(hosts/presets) # L3.4: factory bank + the user's preset folder, for GUI hosts
 
 # The real-time host (L2.1). Default ON only on Windows, the platform it's developed and tested on;
 # miniaudio itself is cross-platform, so turning it on elsewhere should work but is untested.

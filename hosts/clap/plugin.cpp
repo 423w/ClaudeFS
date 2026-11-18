@@ -13,12 +13,14 @@
 #include "midi_stream.h"
 
 #include <fss/synth/params.h>
+#include <fss/synth/patch_io.h>
 #include <fss/util/realtime_guard.h>
 
 #include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <span>
+#include <string>
 #include <vector>
 
 namespace fss::plugin {
@@ -550,26 +552,51 @@ bool FssClap::paramTextToValue(clap_id id, const char* text, double* out) const
 // State [main]
 // =====================================================================================================
 
+// Since L3.4 (D15) the state is the same text as a preset file (synth::patchToText): a project's CFS state
+// can be read, diffed, even copied out into a preset. Projects saved by the L3.2 build contain the binary
+// "CFS0" format instead; it starts with that magic (no text patch can), so load() tells them apart.
+
 bool FssClap::stateSave(const clap_ostream* stream)
 {
     if (!stream)
         return false;
-    const bool ok = writeAll(stream, state_v0::save(mainPatch()));
-    Trace::log(this, "state.save: %s", ok ? "ok" : "FAILED (stream write)");
+    const std::string text = synth::patchToText(mainPatch(), presetName_);
+    std::vector<std::byte> bytes(text.size());
+    std::memcpy(bytes.data(), text.data(), text.size());
+    const bool ok = writeAll(stream, bytes);
+    Trace::log(this, "state.save: %zu bytes, %s", bytes.size(), ok ? "ok" : "FAILED (stream write)");
     return ok;
 }
 
 bool FssClap::stateLoad(const clap_istream* stream)
 {
     std::vector<std::byte> bytes;
-    synth::Patch patch;
-    const bool ok = stream && readAll(stream, bytes, 1u << 20) && state_v0::load(bytes, patch);
-    Trace::log(this, "state.load: %zu bytes, %s", bytes.size(), ok ? "ok" : "REJECTED");
-    if (!ok) {
-        if (hostLog_)
-            hostLog_->log(host_, CLAP_LOG_WARNING, "CFS: could not load the saved state (not a CFS state, or corrupt)");
+    if (!stream || !readAll(stream, bytes, synth::kMaxPatchTextBytes)) {
+        Trace::log(this, "state.load: REJECTED (stream error or too large)");
         return false;
     }
+    synth::Patch patch;
+    std::string name;
+    std::string error;
+    bool ok = false;
+    if (bytes.size() >= 4 && std::memcmp(bytes.data(), state_v0::kMagic, 4) == 0) {
+        ok = state_v0::load(bytes, patch); // a project saved by the L3.2 build
+        error = "corrupt CFS0 state";
+    } else {
+        const synth::PatchLoad r =
+            synth::patchFromText(std::string_view(reinterpret_cast<const char*>(bytes.data()), bytes.size()));
+        ok = r.ok;
+        patch = r.patch;
+        name = r.name;
+        error = r.error + (r.errorLine ? " (line " + std::to_string(r.errorLine) + ")" : "");
+    }
+    Trace::log(this, "state.load: %zu bytes, %s%s", bytes.size(), ok ? "ok" : "REJECTED: ", ok ? "" : error.c_str());
+    if (!ok) {
+        if (hostLog_)
+            hostLog_->log(host_, CLAP_LOG_WARNING, ("CFS: could not load the saved state: " + error).c_str());
+        return false;
+    }
+    presetName_ = name;
     applyPatchFromMain(patch);
     return true;
 }

@@ -12,6 +12,7 @@
 #include "score.h"
 
 #include <fss/dsp/lfo.h>
+#include <fss/util/math.h>
 #include <fss/synth/presets.h>
 
 #include <algorithm>
@@ -67,7 +68,7 @@ void renderL1_11(const std::filesystem::path& dir)
         lead.ops[3] = {.level = 1.0f, .env = {.attackMs = 30.0f, .decayMs = 500.0f, .sustain = 0.9f, .releaseMs = 300.0f}};
         lead.lfo1 = {.rateHz = 5.5f, .shape = dsp::LfoShape::Sine, .delayMs = 350.0f, .fadeMs = 600.0f, .keySync = true};
         lead.routes.vibratoSemitones = 0.35f;
-        lead.outputGain = 0.4f;
+        lead.outputDb = util::gainToDb(0.4f);
         const auto buf = renderWithEngine(lead, {{0, 69, 100, 3000}}, {.tailMs = 400.0});
         writeStereo(dir / "l1.11_vibrato_delay.wav", buf);
         // Measured depth (peak-to-peak / 2, in cents) in windows: should be 0 until 0.35 s, then grow to 35.

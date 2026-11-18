@@ -10,6 +10,7 @@
 #include "scenarios.h"
 
 #include <fss/synth/presets.h>
+#include <fss/util/math.h>
 
 #include <cstdio>
 
@@ -25,7 +26,7 @@ synth::Patch sinePad()
     p.ops[0] = {.level = 1.0f, .env = {.attackMs = 5.0f, .decayMs = 1.0f, .sustain = 1.0f, .releaseMs = 1500.0f}};
     for (int i : {1, 2, 3})
         p.ops[static_cast<std::size_t>(i)].level = 0.0f;
-    p.outputGain = 0.12f;
+    p.outputDb = util::gainToDb(0.12f);
     return p;
 }
 

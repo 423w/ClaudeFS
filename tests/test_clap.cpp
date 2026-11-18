@@ -7,11 +7,14 @@
 
 #include <fss/engine.h>
 #include <fss/synth/params.h>
+#include <fss/synth/patch_io.h>
+#include <fss/synth/presets.h>
 #include <fss/util/realtime_guard.h>
 
 #include <catch2/catch_test_macros.hpp>
 #include <catch2/generators/catch_generators.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <cstring>
 #include <random>
@@ -442,4 +445,79 @@ TEST_CASE("clap state v0: round trip, and corrupted bytes never crash the loader
         }
     }
     SUCCEED("accepted " << accepted << " of 5000 mutated states (values clamped)");
+}
+
+// ---- state through the plugin (L3.4) ---------------------------------------------------------------------
+
+namespace {
+struct MemOut {
+    std::string bytes;
+    clap_ostream iface{this, [](const clap_ostream* s, const void* b, std::uint64_t n) -> std::int64_t {
+                           static_cast<MemOut*>(s->ctx)->bytes.append(static_cast<const char*>(b), n);
+                           return static_cast<std::int64_t>(n);
+                       }};
+};
+struct MemIn {
+    std::string bytes;
+    std::size_t pos = 0;
+    clap_istream iface{this, [](const clap_istream* s, void* b, std::uint64_t n) -> std::int64_t {
+                           auto* self = static_cast<MemIn*>(s->ctx);
+                           const std::size_t take = std::min<std::size_t>({static_cast<std::size_t>(n), self->bytes.size() - self->pos, 5});
+                           std::memcpy(b, self->bytes.data() + self->pos, take);
+                           self->pos += take;
+                           return static_cast<std::int64_t>(take);
+                       }};
+};
+const clap_plugin_state* stateOf(const Plugin& pl)
+{
+    return static_cast<const clap_plugin_state*>(pl.p->get_extension(pl.p, CLAP_EXT_STATE));
+}
+} // namespace
+
+TEST_CASE("clap state: saves the text format, with the preset name", "[clap][state]")
+{
+    Plugin pl(false);
+    pl.impl().applyPatchFromMain(synth::presets::bell());
+    pl.impl().setPresetName("Bell");
+    MemOut out;
+    REQUIRE(stateOf(pl)->save(pl.p, &out.iface));
+    CHECK(out.bytes.rfind("CFS patch 1\n", 0) == 0);
+    Plugin other(false);
+    MemIn in{out.bytes};
+    REQUIRE(stateOf(other)->load(other.p, &in.iface));
+    CHECK(other.impl().presetName() == "Bell");
+    for (const synth::ParamInfo& info : synth::kParams)
+        CHECK(synth::getParam(other.impl().mainPatch(), info) == synth::getParam(synth::presets::bell(), info));
+}
+
+TEST_CASE("clap state: a project saved by the L3.2 build (binary CFS0) still loads", "[clap][state]")
+{
+    // A golden fixture, written out by hand from the v0 layout (not produced by today's code): magic, version
+    // 0, two entries (cutoff 500 Hz, algorithm 3), little-endian. This is what an FL Studio project saved
+    // between L3.2 and L3.4 contains.
+    const unsigned char v0[] = {'C', 'F', 'S', '0', 0, 0, 0, 0, 2, 0, 0, 0,
+                                11, 0, 0, 0, 0x00, 0x00, 0xFA, 0x43,  // id 11 = 500.0f
+                                1, 0, 0, 0, 0x00, 0x00, 0x40, 0x40}; // id 1 = 3.0f
+    Plugin pl(false);
+    MemIn in{std::string(reinterpret_cast<const char*>(v0), sizeof v0)};
+    REQUIRE(stateOf(pl)->load(pl.p, &in.iface));
+    CHECK(pl.impl().mainPatch().filter.cutoffHz == 500.0f);
+    CHECK(pl.impl().mainPatch().algorithmNumber == 3);
+    CHECK(pl.impl().mainPatch().ops[0].env.decayMs == synth::OperatorParams{}.env.decayMs); // the rest: defaults
+    // ...and the next save upgrades the project to the text format.
+    MemOut out;
+    REQUIRE(stateOf(pl)->save(pl.p, &out.iface));
+    CHECK(out.bytes.rfind("CFS patch 1\n", 0) == 0);
+}
+
+TEST_CASE("clap state: loading while active reaches the Engine through the queue", "[clap][state]")
+{
+    Plugin pl; // active
+    MemIn in{synth::patchToText(synth::presets::organ(), "Organ")};
+    REQUIRE(stateOf(pl)->load(pl.p, &in.iface));
+    OutList out;
+    std::vector<float> l(64), r(64);
+    pl.run(64, nullptr, &out, l.data(), r.data());
+    CHECK(out.events.empty()); // a state load is not a user edit: nothing for the host to record
+    CHECK(pl.impl().mainPatch().algorithmNumber == 8);
 }

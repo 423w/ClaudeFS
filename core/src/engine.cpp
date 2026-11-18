@@ -4,6 +4,8 @@
 
 #include <fss/synth/params.h>
 #include <fss/util/denormal_guard.h>
+#include <fss/util/finite.h>
+#include <fss/util/math.h>
 #include <fss/util/realtime_guard.h>
 
 #include <algorithm>
@@ -44,7 +46,7 @@ void Engine::setPatch(const synth::Patch& patch) noexcept
     patch_ = patch;
     live_ = patch.algorithm;
     liveSettling_ = false;
-    gain_.reset(patch.outputGain);
+    gain_.reset(util::dbToGain(patch.outputDb));
     cutoffOctaves_.reset(std::log2(patch.filter.cutoffHz));
     q_.reset(patch.filter.q);
     restartLfos();
@@ -66,7 +68,7 @@ void Engine::reset() noexcept
     noteCounter_ = steals_ = 0;
     live_ = patch_.algorithm;
     liveSettling_ = false;
-    gain_.reset(patch_.outputGain);
+    gain_.reset(util::dbToGain(patch_.outputDb));
     cutoffOctaves_.reset(std::log2(patch_.filter.cutoffHz));
     q_.reset(patch_.filter.q);
     modWheel_.reset(0.0f);
@@ -104,13 +106,8 @@ void Engine::process(std::span<const Event> events, float* outL, float* outR, in
     // Last line of defence (L6.4): a NaN or Inf must never reach a host. One NaN in a DAW's mixer can
     // poison every bus after it (and some hosts mute the whole track until it's reloaded). If anything in the
     // block isn't finite, the block becomes silence and every voice and filter restarts from a clean state,
-    // so the bad value can't keep circulating in a feedback path or a filter's state. `x - x` is 0 for every
-    // finite x and NaN for NaN/±Inf, so summing it is a cheap, branch-free test of the whole block.
-    // (This relies on IEEE arithmetic: MSVC's default /fp:precise keeps `x - x`; /fp:fast could fold it to 0.)
-    float check = 0.0f;
-    for (int i = 0; i < numFrames; ++i)
-        check += (outL[i] - outL[i]) + (outR[i] - outR[i]);
-    if (!(check == 0.0f)) { // NaN compares unequal to everything, so this is "check is NaN"
+    // so the bad value can't keep circulating in a feedback path or a filter's state.
+    if (!util::allFinite(outL, outR, numFrames)) {
         std::fill(outL, outL + numFrames, 0.0f);
         std::fill(outR, outR + numFrames, 0.0f);
         reset();
@@ -222,7 +219,7 @@ void Engine::paramChange(const Event& e) noexcept
         liveSettling_ = true; // render() glides live_ toward patch_.algorithm
         break;
     case synth::ParamTarget::Output:
-        gain_.setTarget(patch_.outputGain);
+        gain_.setTarget(util::dbToGain(patch_.outputDb));
         break;
     case synth::ParamTarget::FilterCutoff:
         // Smoothed in octaves, not Hz: a glide from 100 Hz to 10 kHz then moves evenly *as heard*,

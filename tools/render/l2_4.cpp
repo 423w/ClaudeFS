@@ -12,6 +12,7 @@
 #include "scenarios.h"
 
 #include <fss/synth/params.h>
+#include <fss/util/math.h>
 #include <fss/synth/presets.h>
 
 #include <cmath>
@@ -72,7 +73,7 @@ void renderL2_4(const std::filesystem::path& dir)
     sine.ops[0].env = {.attackMs = 5.0f, .decayMs = 1.0f, .sustain = 1.0f, .releaseMs = 50.0f};
     for (int i : {1, 2, 3})
         sine.ops[static_cast<std::size_t>(i)].level = 0.0f;
-    sine.outputGain = 0.5f;
+    sine.outputDb = util::gainToDb(0.5f);
     for (bool smooth : {true, false}) {
         const auto buf = renderAutomation(sine, smooth, 3.0, {69}, [](int f, std::vector<Event>& ev) {
             const float level = 1.0f - 0.97f * tri(f, 90); // 1.5 s per sweep down and up
@@ -86,7 +87,7 @@ void renderL2_4(const std::filesystem::path& dir)
     fm.ops[0].level = fm.ops[1].level = 0.0f;
     fm.ops[2].level = 0.0f;
     fm.ops[2].env = fm.ops[3].env = {.attackMs = 5.0f, .decayMs = 1.0f, .sustain = 1.0f, .releaseMs = 50.0f};
-    fm.outputGain = 0.4f;
+    fm.outputDb = util::gainToDb(0.4f);
     for (bool smooth : {true, false}) {
         const auto buf = renderAutomation(fm, smooth, 3.0, {45}, [](int f, std::vector<Event>& ev) {
             ev.push_back(Event::paramChange(0, op(2, OpField::Level), 4.0f * tri(f, 90)));

@@ -109,7 +109,12 @@ struct Patch {
     VoiceParams voice{};
     util::Hz tuningA4{440.0};
     util::Semitones bendRange{2.0};       // full pitch-bend wheel deflection
-    float outputGain = 1.0f;
+    // Output level in dB, the param table's unit. Until L3.4 this was a linear gain (outputGain), and the
+    // conversion dB → gain → dB in getParam/setParam made some saved values come back 1 ulp different: near
+    // 0 dB there are more distinct dB floats than gain floats, so linear storage can't hold every dB value.
+    // Rule since then: a Patch stores each parameter in the param table's own unit; conversions happen where
+    // the DSP needs them (Engine: util::dbToGain).
+    float outputDb = 0.0f;
 };
 
 /// What the player did: which key, how hard, and the current bend (−1..1 of bendRange).

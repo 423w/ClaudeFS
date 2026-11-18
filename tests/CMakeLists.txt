@@ -34,10 +34,12 @@ add_executable(fss_tests
     test_svf.cpp
     test_lfo.cpp
     test_play.cpp
-    test_denormal.cpp)
+    test_denormal.cpp
+    test_patch_io.cpp
+    test_preset_library.cpp)
 # Catch2WithMain supplies main(), so test files contain only TEST_CASEs.
 # fss::warnings is linked here, but not to Catch2 itself (see the top-level CMakeLists.txt).
-target_link_libraries(fss_tests PRIVATE fss::core fss::wav fss::score fss::midi_message fss_rt_trap fss::warnings
+target_link_libraries(fss_tests PRIVATE fss::core fss::wav fss::score fss::midi_message fss::preset_library fss_rt_trap fss::warnings
     Catch2::Catch2WithMain)
 
 # catch_discover_tests registers every TEST_CASE as its own CTest test (it runs `fss_tests --list-tests`

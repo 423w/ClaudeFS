@@ -1,0 +1,107 @@
+CFS patch 1
+# CFS (Claude's FirstStreetSynthesis) patch. One "<parameter id> = <value>" per line, values in
+# the units shown in the comments. Ids are permanent (core/include/fss/synth/params.h); a file that
+# leaves an id out gets that parameter's default. Text after '#' is a comment.
+name = Reso pluck
+
+# Global
+1 = 1               # Algorithm (1 stack: A>B>C>D*)
+2 = -13.1515465     # Output [dB]
+3 = 440             # Tuning A4 [Hz]
+4 = 2               # Bend range [st]
+
+# Filter
+10 = 1              # Filter [mode] (Low-pass)
+11 = 250            # Cutoff [Hz]
+12 = 5              # Resonance [Q]
+13 = 5              # Env amount [oct]
+14 = 0.5            # Key track
+15 = 2              # Vel > cutoff [oct]
+16 = 1              # F attack [ms]
+17 = 300            # F decay [ms]
+18 = 0              # F sustain
+19 = 300            # F release [ms]
+
+# LFO 1 (vibrato)
+30 = 5              # LFO1 rate [Hz]
+31 = 0              # LFO1 shape (Sine)
+32 = 0              # LFO1 delay [ms]
+33 = 0              # LFO1 fade [ms]
+34 = 1              # LFO1 key sync (On)
+35 = 0              # Vibrato [st]
+36 = 0.5            # Wheel > vib [st]
+
+# LFO 2 (filter, index)
+40 = 2              # LFO2 rate [Hz]
+41 = 0              # LFO2 shape (Sine)
+42 = 0              # LFO2 retrig (Off)
+43 = 0              # LFO2 > cutoff [oct]
+44 = 0              # LFO2 > index
+
+# Voice
+50 = 0              # Voice mode (Poly)
+51 = 0              # Glide [ms]
+52 = 1              # Glide legato (On)
+53 = 0              # Priority (Last)
+
+# Operator A
+1000 = 1            # Ratio [x]
+1001 = 0            # Detune [cents]
+1002 = 0            # Fixed freq (Off)
+1003 = 440          # Fixed Hz [Hz]
+1004 = 0            # Level
+1005 = 0            # Vel sens
+1006 = 0            # Key level [dB/oct]
+1007 = 0            # Key rate
+1008 = 5            # Attack [ms]
+1009 = 300          # Decay [ms]
+1010 = 0.7          # Sustain
+1011 = 300          # Release [ms]
+1012 = 0            # Feedback
+
+# Operator B
+1100 = 1            # Ratio [x]
+1101 = 0            # Detune [cents]
+1102 = 0            # Fixed freq (Off)
+1103 = 440          # Fixed Hz [Hz]
+1104 = 0            # Level
+1105 = 0            # Vel sens
+1106 = 0            # Key level [dB/oct]
+1107 = 0            # Key rate
+1108 = 5            # Attack [ms]
+1109 = 300          # Decay [ms]
+1110 = 0.7          # Sustain
+1111 = 300          # Release [ms]
+1112 = 0            # Feedback
+
+# Operator C
+1200 = 1            # Ratio [x]
+1201 = 0            # Detune [cents]
+1202 = 0            # Fixed freq (Off)
+1203 = 440          # Fixed Hz [Hz]
+1204 = 2            # Level
+1205 = 0            # Vel sens
+1206 = 0            # Key level [dB/oct]
+1207 = 0            # Key rate
+1208 = 1            # Attack [ms]
+1209 = 2000         # Decay [ms]
+1210 = 0.8          # Sustain
+1211 = 200          # Release [ms]
+1212 = 1            # Feedback
+
+# Operator D
+1300 = 1            # Ratio [x]
+1301 = 0            # Detune [cents]
+1302 = 0            # Fixed freq (Off)
+1303 = 440          # Fixed Hz [Hz]
+1304 = 1            # Level
+1305 = 0            # Vel sens
+1306 = 0            # Key level [dB/oct]
+1307 = 0            # Key rate
+1308 = 1            # Attack [ms]
+1309 = 1500         # Decay [ms]
+1310 = 0.5          # Sustain
+1311 = 250          # Release [ms]
+1312 = 0            # Feedback
+
+end

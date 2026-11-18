@@ -1,5 +1,8 @@
-// state_v0.h: the plugin's first state format (L3.2): deliberately simple, so L3.2 can ship save/load and
-// L3.4 can design the real format (D15) knowing what it has to stay compatible with.
+// state_v0.h: the plugin's first state format (L3.2): deliberately simple, so L3.2 could ship save/load and
+// L3.4 could design the real format (D15) knowing what it has to stay compatible with.
+//
+// LEGACY since L3.4: CFS now SAVES text (synth::patchToText), but must LOAD this format forever, because FL
+// Studio projects saved with the L3.2 build contain it. save() stays only so tests can make v0 states.
 //
 // Layout (all little-endian, which is what every x86/ARM Windows machine is):
 //   bytes 0..3   magic "CFS0"

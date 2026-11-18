@@ -97,7 +97,7 @@ host-agnostic, both can coexist.
 JUCE components / Dear ImGui embedded in the host window / VSTGUI / a WebView UI (HTML/JS) /
 hand-rolled with a 2D library. Trade-offs: control vs. effort vs. how pretty it gets.
 
-### D15. Preset / state format: `OPEN`  *(L3.4)*
+### D15. Preset / state format: `DECIDED` → versioned line-based text, keyed by stable param ids  *(L3.4, see Log)*
 Binary blob (compact, needs careful versioning) vs JSON/text (diffable, human-editable; needs a
 parser, written yourself or a single-header library). Either way: stable param IDs and a version number.
 
@@ -406,6 +406,28 @@ and a state migration that maps the old one).
 **The owner might choose differently if:** they follow CLAP's advice literally (plain values, robust to
 range changes) and accept linear automation curves, or they plan a VST3 build first (VST3 is 0..1 for
 everything, and clap-wrapper then has to convert stepped parameters).
+
+### 2026-11-18: D15 decided (CFS, L3.4): versioned line-based text, keyed by stable parameter ids
+**Decision.** Presets and the plugin's saved state use one text format (`core/.../patch_io.h`):
+`CFS patch <version>`, `name = ...`, one `<param id> = <plain value>` line per parameter (comments after `#`
+carry the name, unit and value label for humans), and a required final `end` line. Values are written with
+`std::to_chars` shortest-exact floats (deterministic, bit-exact round trip). Missing ids → defaults;
+unknown ids → skipped and counted; out-of-range → clamped and counted; anything malformed → the whole
+file is rejected with its line number. Format version 0 (the L3.2 binary state) stays loadable by the
+plugin forever. The factory bank is shipped as `.cfspatch` files embedded at build time.
+**Options considered.** Binary (v0 or a versioned TLV); JSON (needs a parser library or a big hand-written
+one); INI-like text keyed by names; this line format keyed by ids (chosen).
+**Why.** Ids are the one thing that never changes meaning, so keying by id makes versioning nearly free
+(old files lack ids, new files add ids). Text is diffable, greppable and hand-editable; at ~3.3 KB and
+~10 µs to parse, it costs nothing. No new dependency. Strict rejection beats a silently half-loaded sound.
+**Consequences found while building.** (1) The Patch must store each parameter in its table unit
+(Output moved from linear gain to dB) or some values can't round-trip. (2) Text needs an end marker to
+detect truncation.
+**Revisit if:** non-parameter state arrives (wavetables, L4.3: add a section after the parameters, before
+`end`); a parameter's meaning must change (new id + `migrate()`); or a host needs much smaller state.
+**The owner might choose differently if:** they prefer JSON for tooling (any editor validates it; a
+single-header library like nlohmann/json is a fine dependency), or binary for compactness, in which case a
+version field, a size field and a fixture file per old version are the minimum.
 
 <!-- Append entries like:
 ### 2026-11-20: D5 decided: double phase in [0,1)
