@@ -29,6 +29,7 @@ constexpr Scenario kScenarios[] = {
     {"l1.5", fss::render::renderL1_5},
     {"l1.6", fss::render::renderL1_6},
     {"l1.7", fss::render::renderL1_7},
+    {"l1.8", fss::render::renderL1_8},
     {"l2.4", fss::render::renderL2_4},
 };
 
