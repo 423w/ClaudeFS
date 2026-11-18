@@ -39,6 +39,8 @@ public:
     bool controlRect(clap_id paramId, int rect[4]) const;
     /// Draw one frame now (the test host has no message loop running the timer).
     void renderNow();
+    /// Show editor page `page` (L5.1; kPageNames). Takes effect on the next frame.
+    void setPage(int page);
 
 private:
     struct Impl;

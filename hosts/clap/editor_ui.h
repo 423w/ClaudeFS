@@ -43,11 +43,18 @@ struct EditorState {
     char saveName[96] = "";
     std::string status;
     std::string lastPresetName; // to notice preset changes made elsewhere (state load) and update saveName
+    // Which page is showing (L5.1): the editor outgrew one screen, so it has pages (kPageNames). Only the
+    // current page's controls are drawn, so `drawn` below means "has a control on the current page".
+    int page = 0;
     // Filled every frame: which parameters got a control, and where (client pixels: x0, y0, x1, y1).
     // Tests check "every parameter has a control"; the test host uses the rectangles to click real widgets.
     std::bitset<kNumParams> drawn;
     std::array<std::array<float, 4>, kNumParams> rects{};
 };
+
+/// The editor's pages, in button order. Page 0 is the voice (operators, filter, LFOs); page 1 the FX chain.
+inline constexpr const char* kPageNames[] = {"Synth", "FX"};
+inline constexpr int kNumPages = static_cast<int>(std::size(kPageNames));
 
 /// Draw the whole editor as one ImGui window covering the display. Call between ImGui::NewFrame and Render.
 void drawEditor(EditorModel& model, EditorState& state);

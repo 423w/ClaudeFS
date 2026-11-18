@@ -85,6 +85,7 @@ std::vector<float> renderInBlocks(const std::vector<TimedEvent>& score, std::uin
         }
         eng.process(blockEvents, out.data() + start, right.data() + start, n);
     }
+    out.insert(out.end(), right.begin(), right.end()); // both channels (stereo FX since L5.1)
     return out;
 }
 

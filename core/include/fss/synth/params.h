@@ -7,7 +7,7 @@
 // STABLE IDS: presets and DAW automation refer to parameters by `id`, forever. Never renumber or reuse
 // an id; add new parameters with new ids (append new OpField values at the END of the enum). Array order
 // is free to change (it's only display order).
-//   globals:             1..99
+//   globals:             1..99, then FX 200..299 (L5.1)
 //   operator parameters: 1000 + 100·op + field   (op 0..3 = A..D)
 //
 // VALUES are always *plain* (the unit shown in `unit`: Hz, ms, dB...). The normalized 0..1 form, which is
@@ -52,6 +52,7 @@ enum class ParamTarget : std::uint8_t {
     Lfo,          // shapes, depths, delay/fade, sync: read every sample or at the next note, nothing to do
     VoiceMode,    // poly/mono/legato: the Engine releases what's sounding and starts clean (L2.5)
     Play,         // glide, glide mode, note priority: read at the next note event, nothing to do
+    Fx,           // an FX-chain setting (L5.1): the chain gets new targets (switches fade, values glide)
 };
 
 enum class OpField : std::uint8_t { // APPEND ONLY: values are part of the stable parameter ids
@@ -76,6 +77,7 @@ struct ParamInfo {
 namespace param_id {
 // Globals are numbered in groups of ten so related ids stay together: 1-9 global, 10-19 filter (L1.10),
 // 30-39 LFO 1 + vibrato, 40-49 LFO 2 (L1.11), 50-59 voice / playing (L2.5).
+// FX (L5.1) get a hundred of their own, ten per effect: 200-209 width, then one decade per later effect.
 inline constexpr std::uint32_t kAlgorithm = 1, kOutputDb = 2, kTuningA4 = 3, kBendRange = 4;
 inline constexpr std::uint32_t kFilterMode = 10, kCutoff = 11, kResonance = 12, kFilterEnvAmount = 13,
                                kKeyTrack = 14, kFilterVel = 15, kFilterAttack = 16, kFilterDecay = 17,
@@ -84,6 +86,7 @@ inline constexpr std::uint32_t kLfo1Rate = 30, kLfo1Shape = 31, kLfo1Delay = 32,
                                kVibrato = 35, kWheelVibrato = 36;
 inline constexpr std::uint32_t kLfo2Rate = 40, kLfo2Shape = 41, kLfo2Retrigger = 42, kLfo2Cutoff = 43, kLfo2Index = 44;
 inline constexpr std::uint32_t kVoiceMode = 50, kGlide = 51, kGlideLegato = 52, kPriority = 53;
+inline constexpr std::uint32_t kWidthOn = 200, kWidth = 201;
 constexpr std::uint32_t op(int opIndex, OpField f) { return 1000u + 100u * static_cast<std::uint32_t>(opIndex) + static_cast<std::uint32_t>(f); }
 } // namespace param_id
 
@@ -161,6 +164,9 @@ inline constexpr ParamInfo kGlobalParams[] = {
     {param_id::kGlide, "Glide", "ms", 0.0f, 2000.0f, 0.0f, Skew::Power2, 0.0f, 5, ParamTarget::Play, -1, {}, "Voice"},
     {param_id::kGlideLegato, "Glide legato", "on/off", 0.0f, 1.0f, 1.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Play, -1, {}, "Voice"},
     {param_id::kPriority, "Priority", "", 0.0f, 2.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Play, -1, {}, "Voice"},
+    // ---- FX chain (L5.1). Smoothing happens inside the effects, so smoothingMs is 0 here. ----
+    {param_id::kWidthOn, "Width on", "on/off", 0.0f, 1.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Fx, -1, {}, "Width"},
+    {param_id::kWidth, "Width", "%", 0.0f, 200.0f, 100.0f, Skew::Linear, 0.0f, 0, ParamTarget::Fx, -1, {}, "Width"},
 };
 inline constexpr std::size_t kNumGlobalParams = std::size(kGlobalParams);
 

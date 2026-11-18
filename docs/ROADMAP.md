@@ -212,7 +212,7 @@ Modes (tell Claude which one you want):
 - [ ] L4.7 Preset bank ★M6
 
 ### Branch 5: Effects
-- [ ] L5.1 FX architecture
+- [x] L5.1 FX architecture (D16; FL check: docs/FL-STUDIO.md section 7)
 - [ ] L5.2 Distortion & oversampling
 - [ ] L5.3 Delay
 - [ ] L5.4 Chorus/flanger/phaser

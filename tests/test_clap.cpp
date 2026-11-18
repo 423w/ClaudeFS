@@ -521,3 +521,18 @@ TEST_CASE("clap state: loading while active reaches the Engine through the queue
     CHECK(out.events.empty()); // a state load is not a user edit: nothing for the host to record
     CHECK(pl.impl().mainPatch().algorithmNumber == 8);
 }
+
+TEST_CASE("clap plugin: clap.tail reports the FX chain's tail (none until an effect with a tail is on)", "[clap][fx]")
+{
+    Plugin pl;
+    const auto* tail = static_cast<const clap_plugin_tail*>(pl.p->get_extension(pl.p, CLAP_EXT_TAIL));
+    REQUIRE(tail != nullptr);
+    CHECK(tail->get(pl.p) == 0u); // width only (L5.1): no memory, no tail
+    // Switch width on through host automation: still no tail, and the plugin keeps working.
+    InList in;
+    in.param(0, synth::param_id::kWidthOn, 1.0);
+    std::vector<float> l(64), r(64);
+    pl.run(64, &in, nullptr, l.data(), r.data());
+    CHECK(pl.impl().mainPatch().fx.width.enabled);
+    CHECK(tail->get(pl.p) == 0u);
+}

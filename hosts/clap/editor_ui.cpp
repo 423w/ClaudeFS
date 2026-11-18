@@ -498,11 +498,60 @@ void topBar(EditorModel& m, EditorState& st)
     ImGui::Dummy(ImVec2(meterW, u));
 }
 
+/// The page buttons under the top bar (L5.1). Plain buttons rather than an ImGui tab bar: the page lives in
+/// EditorState, so tests and the test host can choose it directly.
+void pageButtons(EditorState& st)
+{
+    for (int k = 0; k < kNumPages; ++k) {
+        if (k > 0)
+            ImGui::SameLine();
+        const bool current = st.page == k;
+        if (current)
+            ImGui::PushStyleColor(ImGuiCol_Button, ImGui::GetStyleColorVec4(ImGuiCol_ButtonActive));
+        if (ImGui::Button(kPageNames[k]))
+            st.page = k;
+        if (current)
+            ImGui::PopStyleColor();
+    }
+}
+
+/// The FX groups of the param table (every group with an FX parameter), in table order, which is chain order.
+std::vector<std::string_view> fxGroups()
+{
+    std::vector<std::string_view> out;
+    for (const ParamInfo& p : kParams)
+        if (p.target == synth::ParamTarget::Fx && std::find(out.begin(), out.end(), p.group) == out.end())
+            out.push_back(p.group);
+    return out;
+}
+
+/// Page 1: one panel per effect, side by side in chain order, with a signal-flow caption.
+void fxPage(EditorModel& m, EditorState& st)
+{
+    const std::vector<std::string_view> groups = fxGroups();
+    ImGui::TextDisabled("voices  >  %s  >  output", groups.empty() ? "" : "the effects below, left to right");
+    const ImGuiStyle& style = ImGui::GetStyle();
+    const ImVec2 avail = ImGui::GetContentRegionAvail();
+    // At least four panel widths, so one effect doesn't stretch across the whole window.
+    const float n = static_cast<float>(std::max<std::size_t>(groups.size(), 4));
+    const float w = (avail.x - style.ItemSpacing.x * (n - 1.0f)) / n;
+    for (std::size_t k = 0; k < groups.size(); ++k) {
+        if (k > 0)
+            ImGui::SameLine();
+        const std::string name(groups[k]);
+        ImGui::BeginChild(name.c_str(), ImVec2(w, avail.y * 0.6f), ImGuiChildFlags_Borders);
+        ImGui::SeparatorText(name.c_str());
+        controlTable(m, st, name.c_str(), group(name));
+        ImGui::EndChild();
+    }
+}
+
 } // namespace
 
 void drawEditor(EditorModel& m, EditorState& st)
 {
     st.drawn.reset();
+    st.page = std::clamp(st.page, 0, kNumPages - 1);
     const ImGuiIO& io = ImGui::GetIO();
     ImGui::SetNextWindowPos(ImVec2(0.0f, 0.0f));
     ImGui::SetNextWindowSize(io.DisplaySize);
@@ -510,7 +559,13 @@ void drawEditor(EditorModel& m, EditorState& st)
                  ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoSavedSettings |
                      ImGuiWindowFlags_NoBringToFrontOnFocus);
     topBar(m, st);
+    pageButtons(st);
     ImGui::Separator();
+    if (st.page == 1) {
+        fxPage(m, st);
+        ImGui::End();
+        return;
+    }
 
     const ImGuiStyle& style = ImGui::GetStyle();
     const ImVec2 avail = ImGui::GetContentRegionAvail();

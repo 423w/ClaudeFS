@@ -101,7 +101,7 @@ hand-rolled with a 2D library. Trade-offs: control vs. effort vs. how pretty it 
 Binary blob (compact, needs careful versioning) vs JSON/text (diffable, human-editable; needs a
 parser, written yourself or a single-header library). Either way: stable param IDs and a version number.
 
-### D16. FX architecture: `OPEN`  *(L5.1)*
+### D16. FX architecture: `DECIDED` → fixed order, effects held by value in a `std::tuple`, a C++20 concept as the interface  *(L5.1, see Log)*
 Fixed chain order vs reorderable slots; virtual `Effect` interface vs `std::variant` + `std::visit`.
 
 ### D17. Reverb algorithm: `OPEN`  *(L5.5)*
@@ -447,6 +447,38 @@ matters; or macOS/Linux builds arrive (swap the D3D11 backend for Metal/OpenGL, 
 **The owner might choose differently if:** they want to learn a retained-mode toolkit (VSTGUI or JUCE),
 they care most about looks (a WebView with HTML/CSS), or they want zero third-party code in the plugin
 (hand-rolled Direct2D is very educational, and a lot more work per widget).
+
+### 2026-11-18: D16 decided (CFS, L5.1): fixed-order chain, effects by value in a tuple, a concept as the interface
+**Decision.** `fss::fx::FxChain` holds its effects **by value, in a fixed order**, in a `std::tuple` of
+`FxSlot<E>`s, visited with fold expressions (static dispatch: no virtual call, no heap, no variant). The "interface"
+is the C++20 concept `StereoEffect` (prepare / reset / process(StereoBlock) in place / tailSamples / kSpillsTail).
+Each effect applies its own dry/wet mix (linear or equal-power, per effect, helpers in `effect.h`); the generic
+`FxSlot` only switches it on and off: a 10 ms linear fade, either **crossfade** (off = back to dry, the effect
+stops) or **spill** (off = stop feeding it, its tail rings out), and it **sleeps** an effect (reset, not called)
+when it isn't needed, all decided per sample so the chain stays block-size invariant. Planned order:
+drive → chorus → delay → reverb → EQ → width → output gain → (Engine) safety clip. The Output level moved into
+the chain as its last stage (bit-exact: the l1.7 hash didn't change). Effects' parameters are ordinary
+param-table entries (ids 200-299, ten per effect), stored in `Patch::fx`.
+**Options considered.** (1) A virtual `Effect` base and an array of pointers (reorderable at run time; one
+virtual call per effect per block). (2) `std::variant<Drive, Chorus, ...>` slots + `std::visit` (reorderable,
+no heap; every slot is as big as the biggest effect, and every visit is a jump table). (3) A fixed struct of all
+effects (simplest; order in code). (4) The chosen mix of (3) with a generic slot and a concept.
+**Why.** *Measured, as the lesson asks*: three slots, 20 s of audio, Release: tuple 11.5 / 12.8 / 13.2 ns per
+sample at blocks of 16 / 64 / 256, virtual 11.8 / 13.1 / 13.1 ns: +3 %, +2.5 %, −0.4 %. The dispatch cost is
+noise, so performance didn't decide it. What did: (a) **reordering is a parameter-design problem, not a C++
+one**: an order parameter has to be stored, automated, and crossfaded when it changes (a reorder is a step
+in the signal), and every preset's sound then depends on it; a synth's FX section in a fixed, well-chosen order
+(Juno, DX7 II, most hardware) covers almost every real use. (b) With fixed order the tuple is the simplest
+thing that keeps every effect generic (one slot class for all of them) and every call inlinable. (c) The
+concept turns "forgot noexcept on process" into a readable compile error.
+**Revisit if:** a real sound needs a different order (most likely: delay after reverb, or drive after chorus).
+Then add an order *parameter* with a crossfaded switch between two or three fixed orders, not free reordering;
+or if the chain grows past ~10 effects and compile times matter.
+**The owner might choose differently if:** they want reorderable slots as a feature (drag-and-drop FX like
+Serum or Vital): then a variant of effect types per slot is the natural fit (no heap, value semantics, and
+`std::visit` is fine at one call per block); or they prefer the classic virtual base class because it's the
+pattern they'll meet in every plugin framework (JUCE's `AudioProcessor`), and the measured cost says that's a
+perfectly good reason.
 
 <!-- Append entries like:
 ### 2026-11-20: D5 decided: double phase in [0,1)

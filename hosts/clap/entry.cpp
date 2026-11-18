@@ -72,6 +72,15 @@ __declspec(dllexport) bool fss_debug_editor_control_rect(const clap_plugin* p, s
     auto* e = fss::plugin::FssClap::self(p)->editorWindow();
     return e && e->controlRect(paramId, rect4);
 }
+__declspec(dllexport) bool fss_debug_editor_page(const clap_plugin* p, int page)
+{
+    // False for a page that doesn't exist, so the test host can find out how many there are.
+    auto* e = fss::plugin::FssClap::self(p)->editorWindow();
+    if (!e || page < 0 || page >= fss::plugin::kNumPages)
+        return false;
+    e->setPage(page);
+    return true;
+}
 __declspec(dllexport) bool fss_debug_editor_snapshot(const clap_plugin* p, const char* bmpPath)
 {
     auto* e = fss::plugin::FssClap::self(p)->editorWindow();

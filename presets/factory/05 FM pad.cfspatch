@@ -44,6 +44,10 @@ name = FM pad
 52 = 1              # Glide legato (On)
 53 = 0              # Priority (Last)
 
+# Width
+200 = 0             # Width on (Off)
+201 = 100           # Width [%]
+
 # Operator A
 1000 = 2            # Ratio [x]
 1001 = 4            # Detune [cents]

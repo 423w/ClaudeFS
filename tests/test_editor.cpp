@@ -86,10 +86,17 @@ TEST_CASE("editor: every parameter in the table has a control", "[editor]")
     HeadlessImGui ui;
     FakeModel m;
     EditorState st;
-    ui.frame(m, st);
+    // Since L5.1 the editor has pages: every parameter must be on exactly one of them.
+    std::array<int, plugin::kNumParams> pagesWithControl{};
+    for (int page = 0; page < plugin::kNumPages; ++page) {
+        st.page = page;
+        ui.frame(m, st);
+        for (std::size_t i = 0; i < plugin::kNumParams; ++i)
+            pagesWithControl[i] += st.drawn[i] ? 1 : 0;
+    }
     for (std::size_t i = 0; i < plugin::kNumParams; ++i) {
         INFO(synth::kParams[i].name << " (id " << synth::kParams[i].id << ")");
-        CHECK(st.drawn[i]);
+        CHECK(pagesWithControl[i] == 1);
     }
     CHECK(m.calls.empty()); // drawing alone never edits anything
 }

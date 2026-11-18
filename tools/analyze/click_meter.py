@@ -32,6 +32,9 @@ def main() -> None:
     p.add_argument("wav", nargs="+")
     p.add_argument("--cutoff", type=float, default=2000.0, help="Hz; energy above this counts as click")
     p.add_argument("--half", type=int, default=512, help="samples on each side of the seam")
+    p.add_argument("--channel", default="mix",
+                   help="'mix' (average, the default) or a channel number (0 = left). A stereo-only change, like "
+                        "L5.1's width switch, is invisible in the mix: measure one channel")
     p.add_argument("--at", type=float, action="append", default=[],
                    help="also measure a window centred at this time in seconds (e.g. a note-off); repeatable")
     args = p.parse_args()
@@ -40,7 +43,7 @@ def main() -> None:
     print(f"{'file':44} {'first':>7} {'last':>8} {'start dB':>9} {'end dB':>8}{at_cols}"
           f"   (energy above {args.cutoff:g} Hz)")
     for path in args.wav:
-        rate, x = wavio.load_wav(path)
+        rate, x = wavio.load_wav(path, args.channel if args.channel == "mix" else int(args.channel))
         h = min(args.half, len(x))
         z = np.zeros(h)
         start = np.concatenate([z, x[:h]])

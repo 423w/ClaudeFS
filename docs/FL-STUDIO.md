@@ -57,7 +57,7 @@ Record a knob gesture:
 3. Draw an automation clip by hand from 0 % to 100 %.
    - Expect: the knob sweeps 20 Hz → 20 kHz with the clip's *middle* at about **630 Hz** (CFS exposes continuous
      parameters as knob positions, so the sweep is even in pitch, not in Hz: see DECISIONS.md, L3.2 entry).
-4. FL's own parameter list: in the wrapper menu, **Browse parameters**. Expect 82 parameters (30 global + 13 per operator), grouped with
+4. FL's own parameter list: in the wrapper menu, **Browse parameters**. Expect 84 parameters as of L5.1 (32 global + 13 per operator; Phase F adds more, see section 7), grouped with
    names like "Cutoff", "Op A Ratio"; menus (filter mode, LFO shape) show names, not numbers.
 
 ## 5. Save with the project
@@ -84,3 +84,15 @@ Things only you can tell:
 - Does **typing** in the preset-name box work inside FL's wrapper? (Hosts often keep the keyboard.)
 - Does **resizing** the plugin window work, and does it look sharp on your display scaling?
 - CPU: FL's CPU meter with 16 notes held should be in the same range as `fss_play` (about 5–15 % of a core).
+
+## 7. Phase F features (L5.1 onward): what to try, and what you should hear
+Each lesson adds a subsection. Reinstall the plugin after each build (`tools\install_clap.ps1`), then rescan.
+
+### L5.1: the FX page, width, and the tail
+1. Open CFS's editor: the top bar now has **Synth** and **FX** buttons. Click **FX**: one panel, **Width**.
+   - Expect: everything you did in M5 still works on the Synth page; the FX page shows the Width switch and knob.
+2. Play a chord, switch **Width on** and turn **Width** from 0 % to 200 % while it sounds.
+   - Expect: **no change at all**. CFS's voices are mono until L4.4 (unison), and width can only scale a
+     difference between the channels. This step checks that switching an effect while playing doesn't click.
+3. FL's parameter list (**Browse parameters**) now ends with "Width on" and "Width" in a "Width" module.
+4. Optional, with `CFS_CLAP_TRACE=1`: nothing new to look for yet; the tail extension reports 0 until the delay.

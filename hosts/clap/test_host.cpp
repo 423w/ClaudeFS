@@ -21,6 +21,7 @@
 #include <chrono>
 #include <cmath>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <random>
 #include <string>
@@ -350,6 +351,7 @@ bool loadState(Instance& inst, const std::vector<std::uint8_t>& bytes, std::size
 using EditorRender = bool (*)(const clap_plugin*);
 using EditorRect = bool (*)(const clap_plugin*, std::uint32_t, int*);
 using EditorSnapshot = bool (*)(const clap_plugin*, const char*);
+using EditorPage = bool (*)(const clap_plugin*, int);
 
 /// A hidden top-level window standing in for FL Studio's plugin window.
 HWND makeHostWindow()
@@ -381,7 +383,7 @@ void pump(Instance& inst, OutEvents& out)
     inst.p->process(inst.p, &proc);
 }
 
-void testEditor(const Library& lib, const char* snapshotPath)
+void testEditor(const Library& lib, const char* snapshotPath, int snapshotPage)
 {
     const auto render = reinterpret_cast<EditorRender>(GetProcAddress(lib.dll, "fss_debug_editor_render"));
     const auto rectOf = reinterpret_cast<EditorRect>(GetProcAddress(lib.dll, "fss_debug_editor_control_rect"));
@@ -425,12 +427,26 @@ void testEditor(const Library& lib, const char* snapshotPath)
     check(okB, "a second instance's editor open at the same time");
     std::printf("    %.2f ms per editor frame (CPU, main thread, incl. D3D11 submit)\n", msPerFrame);
 
-    // Every parameter has a control, and we know where each one is.
-    int missing = 0;
-    for (const synth::ParamInfo& p : synth::kParams) {
-        int rc[4];
-        missing += rectOf(a.p, p.id, rc) ? 0 : 1;
+    // Every parameter has a control, and we know where each one is. Since L5.1 the editor has pages: look at
+    // each, then come back to the first (the drag below needs the cutoff knob).
+    const auto setPage = reinterpret_cast<EditorPage>(GetProcAddress(lib.dll, "fss_debug_editor_page"));
+    check(setPage != nullptr, "debug export fss_debug_editor_page present");
+    std::vector<bool> found(synth::kParams.size(), false);
+    int pages = 0;
+    for (; setPage && setPage(a.p, pages); ++pages) { // false = no such page: we've seen them all
+        render(a.p);
+        for (std::size_t i = 0; i < synth::kParams.size(); ++i) {
+            int rc[4];
+            if (rectOf(a.p, synth::kParams[i].id, rc))
+                found[i] = true;
+        }
     }
+    if (setPage) {
+        setPage(a.p, 0);
+        render(a.p);
+    }
+    const auto missing = std::count(found.begin(), found.end(), false);
+    std::printf("    %zu parameters, %d editor pages\n", synth::kParams.size(), pages);
     check(missing == 0, "every parameter has a control in the editor");
 
     // Drag the cutoff knob upward with real mouse messages, the way a user does.
@@ -488,6 +504,8 @@ void testEditor(const Library& lib, const char* snapshotPath)
     check(std::abs(q - 0.9) < 1e-5 && out2.types.empty(), "automation reaches the editor's model, and isn't echoed back to the host");
 
     if (snapshotPath) {
+        if (setPage)
+            setPage(a.p, snapshotPage); // --page N (L5.1): which editor page to photograph
         check(snap(a.p, snapshotPath), "snapshot written");
         std::printf("    snapshot: %s\n", snapshotPath);
     }
@@ -507,16 +525,19 @@ void testEditor(const Library& lib, const char* snapshotPath)
 int main(int argc, char** argv)
 {
     if (argc < 2) {
-        std::printf("usage: fss_clap_host <path to CFS.clap> [--bench] [--snapshot <file.bmp>]\n");
+        std::printf("usage: fss_clap_host <path to CFS.clap> [--bench] [--snapshot <file.bmp> [--page N]]\n");
         return 2;
     }
     bool bench = false;
     const char* snapshotPath = nullptr;
+    int snapshotPage = 0;
     for (int a = 2; a < argc; ++a) {
         if (std::strcmp(argv[a], "--bench") == 0)
             bench = true;
         else if (std::strcmp(argv[a], "--snapshot") == 0 && a + 1 < argc)
             snapshotPath = argv[++a];
+        else if (std::strcmp(argv[a], "--page") == 0 && a + 1 < argc)
+            snapshotPage = std::atoi(argv[++a]);
     }
     const double sr = 48000.0;
 
@@ -674,7 +695,7 @@ int main(int argc, char** argv)
     }
 
     std::printf("7. Editor (clap.gui): a real window inside a hidden host window, driven by real mouse messages\n");
-    testEditor(lib, snapshotPath);
+    testEditor(lib, snapshotPath, snapshotPage);
 
     using DebugCount = std::uint64_t (*)();
     if (auto f = reinterpret_cast<DebugCount>(GetProcAddress(lib.dll, "fss_debug_rt_violations"))) {

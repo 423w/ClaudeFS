@@ -13,10 +13,10 @@
 
 namespace fss {
 
-void Engine::prepare(double sampleRate, int /*maxBlockSize*/, float stealFadeMs) noexcept
+void Engine::prepare(double sampleRate, int maxBlockSize, float stealFadeMs)
 {
-    // maxBlockSize is part of the contract (hosts promise never to exceed it) for buffers that later
-    // lessons will preallocate here. Today's per-sample voices need none.
+    // maxBlockSize is part of the contract (hosts promise never to exceed it): the FX chain (L5.1) sizes its
+    // scratch buffers from it. (Longer stretches still work: the chain processes them in pieces.)
     // Smoothing times come from the parameter table, the single source of truth (L2.4).
     using synth::param_id::op;
     const float levelMs = smoothing_ ? synth::findParam(op(0, synth::OpField::Level))->smoothingMs : 0.0f;
@@ -27,7 +27,7 @@ void Engine::prepare(double sampleRate, int /*maxBlockSize*/, float stealFadeMs)
     for (synth::Voice& v : voices_)
         v.prepare(sampleRate, stealFadeMs, levelMs);
     matrixK_ = matrixMs > 0.0f ? static_cast<float>(1.0 - std::exp(-1.0 / (matrixMs * 0.001 * sampleRate))) : 1.0f;
-    gain_.prepare(sampleRate, gainMs);
+    fx_.prepare(sampleRate, maxBlockSize, gainMs); // allocates: effect buffers and slot scratch
     cutoffOctaves_.prepare(sampleRate, cutoffMs);
     q_.prepare(sampleRate, qMs);
     lfo2_.prepare(sampleRate);
@@ -46,7 +46,9 @@ void Engine::setPatch(const synth::Patch& patch) noexcept
     patch_ = patch;
     live_ = patch.algorithm;
     liveSettling_ = false;
-    gain_.reset(util::dbToGain(patch.outputDb));
+    fx_.setParams(patch.fx);
+    fx_.snapOutputDb(patch.outputDb);
+    fx_.reset(); // a whole new patch: no fades from the old one, and no old echoes
     cutoffOctaves_.reset(std::log2(patch.filter.cutoffHz));
     q_.reset(patch.filter.q);
     restartLfos();
@@ -68,7 +70,9 @@ void Engine::reset() noexcept
     noteCounter_ = steals_ = 0;
     live_ = patch_.algorithm;
     liveSettling_ = false;
-    gain_.reset(util::dbToGain(patch_.outputDb));
+    fx_.setParams(patch_.fx);
+    fx_.snapOutputDb(patch_.outputDb);
+    fx_.reset();
     cutoffOctaves_.reset(std::log2(patch_.filter.cutoffHz));
     q_.reset(patch_.filter.q);
     modWheel_.reset(0.0f);
@@ -219,7 +223,10 @@ void Engine::paramChange(const Event& e) noexcept
         liveSettling_ = true; // render() glides live_ toward patch_.algorithm
         break;
     case synth::ParamTarget::Output:
-        gain_.setTarget(util::dbToGain(patch_.outputDb));
+        fx_.setOutputDb(patch_.outputDb); // glides over 10 ms in the chain's last stage
+        break;
+    case synth::ParamTarget::Fx:
+        fx_.setParams(patch_.fx); // new targets: a switch starts its 10 ms fade, a value its glide
         break;
     case synth::ParamTarget::FilterCutoff:
         // Smoothed in octaves, not Hz: a glide from 100 Hz to 10 kHz then moves evenly *as heard*,
@@ -425,9 +432,16 @@ void Engine::render(float* outL, float* outR, int from, int to) noexcept
         for (synth::Voice& v : voices_)
             if (v.busy())
                 sum += v.tick(ctl);
-        const float y = softClip(gain_.tick() * sum);
-        outL[i] = y;
-        outR[i] = y; // mono voices for now; stereo spread comes with unison (L4.4)
+        outL[i] = sum;
+        outR[i] = sum; // mono voices for now; stereo spread comes with unison (L4.4)
+    }
+    // The FX chain (L5.1) runs on the same stretch, right after the voices: still sample-accurate, because
+    // the next event's changes only reach the chain after this stretch is done. Its last stage is the output
+    // level. Then the safety clip, always last.
+    fx_.process(outL + from, outR + from, to - from);
+    for (int i = from; i < to; ++i) {
+        outL[i] = softClip(outL[i]);
+        outR[i] = softClip(outR[i]);
     }
 }
 

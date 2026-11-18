@@ -434,6 +434,8 @@ bool EditorWindow::snapshot(const char* bmpPath) { return impl_->render(true, bm
 
 void EditorWindow::renderNow() { impl_->render(true, nullptr); }
 
+void EditorWindow::setPage(int page) { impl_->state.page = page; }
+
 bool EditorWindow::controlRect(clap_id paramId, int rect[4]) const
 {
     const int i = indexOf(paramId);

@@ -110,6 +110,7 @@ bool FssClap::init()
     hostParams_ = static_cast<const clap_host_params*>(host_->get_extension(host_, CLAP_EXT_PARAMS));
     hostLog_ = static_cast<const clap_host_log*>(host_->get_extension(host_, CLAP_EXT_LOG));
     hostState_ = static_cast<const clap_host_state*>(host_->get_extension(host_, CLAP_EXT_STATE));
+    hostTail_ = static_cast<const clap_host_tail*>(host_->get_extension(host_, CLAP_EXT_TAIL));
     if (Trace::enabled())
         Trace::log(this, "init: host \"%s\" %s (CLAP %u.%u.%u), CFS %s", host_->name ? host_->name : "?",
                    host_->version ? host_->version : "?", host_->clap_version.major, host_->clap_version.minor,
@@ -130,8 +131,14 @@ bool FssClap::activate(double sampleRate, std::uint32_t minFrames, std::uint32_t
     if (!(sampleRate > 0.0) || !std::isfinite(sampleRate))
         return false;
     pollAudio(); // the mirror is the truth while inactive: make it complete first
-    engine_.prepare(sampleRate, static_cast<int>(std::min<std::uint32_t>(maxFrames, 1u << 20)));
+    try { // prepare allocates the FX buffers (L5.1); an exception must never cross the C boundary
+        engine_.prepare(sampleRate, static_cast<int>(std::min<std::uint32_t>(maxFrames, 1u << 20)));
+    } catch (const std::exception&) {
+        Trace::log(this, "activate: out of memory");
+        return false;
+    }
     engine_.setPatch(mirror_);
+    tail_.store(static_cast<std::uint32_t>(engine_.fxTailSamples()), std::memory_order_relaxed);
     snap_.fill({});
     // toAudio_ is NOT drained: UI changes made while inactive are already in mirror_ (and so in the Engine),
     // and the first process() still turns them into out_events, so the host learns about them.
@@ -183,7 +190,8 @@ clap_process_status FssClap::process(const clap_process* p) noexcept
 
     // Silence detection, for the host: CLAP_PROCESS_SLEEP means "call me again only when there are events",
     // which saves CPU for every idle instance in a big project. Only when nothing sounds AND the block was
-    // exactly zero: an ending release tail must finish first.
+    // exactly zero: an ending release tail must finish first. Since L5.1 also only when no effect is still
+    // ringing: a delay's next echo may be a second away, after many blocks of exact silence.
     float peak = 0.0f;
     if (outL)
         for (std::uint32_t i = 0; i < frames; ++i)
@@ -191,12 +199,20 @@ clap_process_status FssClap::process(const clap_process* p) noexcept
     if (outR)
         for (std::uint32_t i = 0; i < frames; ++i)
             peak = std::max(peak, std::abs(outR[i]));
-    const bool silent = peak == 0.0f && engine_.busyVoices() == 0;
+    const bool silent = peak == 0.0f && engine_.busyVoices() == 0 && !engine_.fxRinging();
     if (bus)
         bus->constant_mask = (silent && outL) ? 0x3u : 0u; // bit per channel: "every sample equals the first"
 
     peak_.store(std::max(peak, peak_.load(std::memory_order_relaxed) * 0.9f), std::memory_order_relaxed);
     voices_.store(engine_.busyVoices(), std::memory_order_relaxed);
+    // clap.tail: tell the host when the tail changes (an effect switched on, a longer delay time), from the
+    // audio thread, as the extension asks.
+    const auto tail = static_cast<std::uint32_t>(engine_.fxTailSamples());
+    if (tail != tail_.load(std::memory_order_relaxed)) {
+        tail_.store(tail, std::memory_order_relaxed);
+        if (hostTail_ && hostTail_->changed)
+            hostTail_->changed(host_);
+    }
     return silent ? CLAP_PROCESS_SLEEP : CLAP_PROCESS_CONTINUE;
 }
 
@@ -764,6 +780,13 @@ const clap_plugin_voice_info kVoiceInfo = {
     },
 };
 
+// clap.tail (L5.1): how long CFS keeps sounding after its input (notes) stops. For an instrument, the voices'
+// own releases are reported per note (NOTE_END); this is the FX chain's part: echoes and reverb. The host uses
+// it to keep processing after the last note of a clip, and to render a bounce long enough.
+const clap_plugin_tail kTailExt = {
+    [](const clap_plugin* p) -> std::uint32_t { return FssClap::self(p)->tailSamples(); },
+};
+
 const clap_plugin_gui kGuiExt = {
     [](const clap_plugin*, const char* api, bool isFloating) -> bool {
         return !isFloating && api && std::strcmp(api, CLAP_WINDOW_API_WIN32) == 0;
@@ -815,6 +838,8 @@ const void* FssClap::getExtension(const char* id) const noexcept
         return &kVoiceInfo;
     if (std::strcmp(id, CLAP_EXT_GUI) == 0)
         return &kGuiExt;
+    if (std::strcmp(id, CLAP_EXT_TAIL) == 0)
+        return &kTailExt;
     return nullptr;
 }
 

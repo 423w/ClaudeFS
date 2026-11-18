@@ -14,11 +14,13 @@
 // brightness, and on a CARRIER change loudness. One mechanism, two musical effects.
 //
 // Signal path of one voice (L1.10):  operators (FmVoice) → filter (Svf, FilterParams) → steal fade → mix.
+// Then, for the sum of all voices (L5.1): the FX chain (fx/fx_chain.h, FxParams) → output level → soft clip.
 // There is no separate "amp" stage: the carriers' envelopes ARE the amplitude envelope.
 #pragma once
 
 #include <fss/dsp/adsr.h>
 #include <fss/dsp/lfo.h>
+#include <fss/fx/fx_params.h>
 #include <fss/synth/algorithm.h>
 #include <fss/synth/held_notes.h>
 #include <fss/util/units.h>
@@ -115,6 +117,7 @@ struct Patch {
     // Rule since then: a Patch stores each parameter in the param table's own unit; conversions happen where
     // the DSP needs them (Engine: util::dbToGain).
     float outputDb = 0.0f;
+    fx::FxParams fx{};                    // the global FX chain after the voices (L5.1); all off by default
 };
 
 /// What the player did: which key, how hard, and the current bend (−1..1 of bendRange).

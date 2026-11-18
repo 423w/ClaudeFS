@@ -21,5 +21,6 @@ void renderL2_4(const std::filesystem::path& outDir); // l2_4.cpp: parameter smo
 void renderL2_5(const std::filesystem::path& outDir); // l2_5.cpp: legato/mono/poly, glide, sustain pedal, bend
 void renderL2_6(const std::filesystem::path& outDir); // l2_6.cpp: CPU per voice, hot spots, denormals (console)
 void renderL3_4(const std::filesystem::path& outDir); // l3_4.cpp: factory bank files + a render of every preset
+void renderL5_1(const std::filesystem::path& outDir); // l5_1.cpp: FX slot switching (clicks), D16 dispatch timing
 
 } // namespace fss::render

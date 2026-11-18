@@ -18,6 +18,7 @@
 #include <fss/dsp/phasor.h>
 #include <fss/dsp/smoother.h>
 #include <fss/event.h>
+#include <fss/fx/fx_chain.h>
 #include <fss/synth/held_notes.h>
 #include <fss/synth/patch.h>
 #include <fss/synth/voice.h>
@@ -34,7 +35,9 @@ public:
     static constexpr int kStealHeadroom = 4; // voices that can be fading out while 16 others sound
     static constexpr int kNumVoices = kMaxPolyphony + kStealHeadroom;
 
-    void prepare(double sampleRate, int maxBlockSize, float stealFadeMs = 5.0f) noexcept;
+    /// May allocate (since L5.1 the FX chain's buffers live here), so it isn't noexcept: a host that must not
+    /// throw (the CLAP plugin's activate) catches std::bad_alloc and reports failure.
+    void prepare(double sampleRate, int maxBlockSize, float stealFadeMs = 5.0f);
     void reset() noexcept;
 
     /// Replace the whole patch at once (no smoothing). Main thread, while audio is stopped, or offline.
@@ -65,6 +68,12 @@ public:
     /// How many blocks came out non-finite (NaN/Inf) and were replaced by silence + a voice reset (L6.4).
     /// Should stay 0 forever; a host may poll it and log a warning (never on the audio thread).
     [[nodiscard]] std::uint64_t nonFiniteBlocks() const noexcept { return nonFiniteBlocks_; }
+    /// The FX chain's tail in samples (L5.1): how long output can go on after the voices fall silent.
+    /// The CLAP plugin reports it to the host (clap.tail).
+    [[nodiscard]] int fxTailSamples() const noexcept { return fx_.tailSamples(); }
+    /// An effect with a tail (delay, reverb) is still running: the output may change though no voice sounds.
+    [[nodiscard]] bool fxRinging() const noexcept { return fx_.ringing(); }
+    [[nodiscard]] const fx::FxChain& fx() const noexcept { return fx_; }
 
 private:
     void processEvents(std::span<const Event> events, float* outL, float* outR, int numFrames) noexcept;
@@ -88,7 +97,7 @@ private:
     synth::Algorithm live_{};       // what voices actually use: patch_.algorithm, smoothed per sample
     bool liveSettling_ = false;     // live_ still gliding toward patch_.algorithm?
     float matrixK_ = 1.0f;          // one-pole coefficient for the matrix glide
-    dsp::OnePoleSmoother gain_{};   // output gain, smoothed per sample
+    fx::FxChain fx_{};              // voice sum → effects → output gain (L5.1; the gain lived here until then)
     dsp::OnePoleSmoother cutoffOctaves_{}, q_{}; // filter base cutoff (log2 Hz) and resonance, smoothed (L1.10)
     dsp::Lfo lfo2_;                 // the global LFO (L1.11)
     dsp::Phasor lfo1Reference_;     // shared phase for voices whose LFO 1 isn't key-synced

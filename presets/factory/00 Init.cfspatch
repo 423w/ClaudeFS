@@ -44,6 +44,10 @@ name = Init
 52 = 1              # Glide legato (On)
 53 = 0              # Priority (Last)
 
+# Width
+200 = 0             # Width on (Off)
+201 = 100           # Width [%]
+
 # Operator A
 1000 = 1            # Ratio [x]
 1001 = 0            # Detune [cents]

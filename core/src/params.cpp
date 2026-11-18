@@ -43,6 +43,8 @@ float getParam(const Patch& patch, const ParamInfo& p) noexcept
         case param_id::kGlide: return patch.voice.glideMs;
         case param_id::kGlideLegato: return patch.voice.glideLegatoOnly ? 1.0f : 0.0f;
         case param_id::kPriority: return static_cast<float>(patch.voice.priority);
+        case param_id::kWidthOn: return patch.fx.width.enabled ? 1.0f : 0.0f;
+        case param_id::kWidth: return patch.fx.width.widthPct;
         default: return p.def;
         }
     }
@@ -110,6 +112,8 @@ void setParam(Patch& patch, const ParamInfo& p, float plain) noexcept
         case param_id::kGlide: patch.voice.glideMs = v; return;
         case param_id::kGlideLegato: patch.voice.glideLegatoOnly = v >= 0.5f; return;
         case param_id::kPriority: patch.voice.priority = static_cast<NotePriority>(static_cast<int>(v)); return;
+        case param_id::kWidthOn: patch.fx.width.enabled = v >= 0.5f; return;
+        case param_id::kWidth: patch.fx.width.widthPct = v; return;
         default: return;
         }
     }
