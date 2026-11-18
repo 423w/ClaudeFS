@@ -182,7 +182,7 @@ Modes (tell Claude which one you want):
 - [x] L1.6 The note
 - [x] L1.7 Voices, polyphony & the Engine ★M2
 - [x] L1.8 Waveforms & aliasing
-- [ ] L1.9 Filters I
+- [x] L1.9 Filters I
 - [ ] L1.10 Filters II
 - [ ] L1.11 LFOs & basic modulation
 
