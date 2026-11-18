@@ -20,6 +20,8 @@ struct AudioStats {
     std::uint32_t minFrames = 0xFFFFFFFFu, maxFrames = 0;
     std::uint64_t noteOn = 0, noteOff = 0, noteChoke = 0, noteExpression = 0, midi = 0, paramValue = 0,
                   paramMod = 0, transport = 0, other = 0, noteEndSent = 0, noBuffers = 0, eventChunks = 0;
+    std::uint64_t tempoChanges = 0;                    // L5.3: how often the host's tempo changed
+    double firstTempo = 0.0, lastTempo = 0.0;          // BPM (0 = the host never sent one)
 };
 
 class Trace {

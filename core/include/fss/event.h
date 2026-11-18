@@ -19,6 +19,8 @@ struct Event {
         ParamChange, // paramId, value = new PLAIN value (units of the param table, L2.4)
         Controller,  // key = MIDI CC number, value = 0..1 (L1.11): performance controllers such as the mod
                      // wheel (CC 1). CCs mapped to *parameters* are translated by the host (param table).
+        Tempo,       // value = the host's tempo in BPM (L5.3): tempo-synced effects follow it. Not part of the
+                     // patch (the song owns the tempo); hosts without a transport never send it (120 BPM).
     };
 
     Type type = Type::NoteOn;
@@ -47,6 +49,7 @@ struct Event {
     {
         return {Type::ParamChange, frame, -1, 0, 0, plainValue, id};
     }
+    static constexpr Event tempo(std::uint32_t frame, float bpm) { return {Type::Tempo, frame, -1, 0, 0, bpm}; }
 };
 
 } // namespace fss

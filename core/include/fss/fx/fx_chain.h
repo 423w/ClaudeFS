@@ -1,6 +1,6 @@
 // fss/fx/fx_chain.h: the global FX chain after the voice sum (L5.1, D16).
 //
-//   voices (mono sum) ─► [ width ] ─► output gain ─► (Engine: safety soft clip)
+//   voices (mono sum) ─► [ delay ] ─► [ width ] ─► output gain ─► (Engine: safety soft clip)
 //                        └── FxSlots, fixed order; later lessons insert theirs ──┘
 //
 // The planned order, each lesson inserting its slot where it belongs:
@@ -15,6 +15,7 @@
 // virtual calls. Adding an effect = one type in the tuple, one line in setParams().
 #pragma once
 
+#include <fss/fx/delay.h>
 #include <fss/fx/effect.h>
 #include <fss/fx/fx_params.h>
 #include <fss/fx/gain.h>
@@ -45,10 +46,16 @@ public:
     /// New settings (targets: switches fade, smoothed values glide). Real-time safe.
     void setParams(const FxParams& p) noexcept
     {
+        auto& delay = std::get<FxSlot<StereoDelay>>(slots_);
+        delay.setEnabled(p.delay.enabled);
+        delay.effect().setParams(p.delay);
         auto& width = std::get<FxSlot<StereoWidth>>(slots_);
         width.setEnabled(p.width.enabled);
         width.effect().setParams(p.width);
     }
+
+    /// The host tempo (L5.3), for tempo-synced effects.
+    void setTempo(double bpm) noexcept { std::get<FxSlot<StereoDelay>>(slots_).effect().setTempo(bpm); }
 
     void setOutputDb(float db) noexcept { output_.setDb(db); }
     void snapOutputDb(float db) noexcept { output_.snapDb(db); }
@@ -78,9 +85,10 @@ public:
     }
 
     [[nodiscard]] const FxSlot<StereoWidth>& width() const noexcept { return std::get<FxSlot<StereoWidth>>(slots_); }
+    [[nodiscard]] const FxSlot<StereoDelay>& delay() const noexcept { return std::get<FxSlot<StereoDelay>>(slots_); }
 
 private:
-    std::tuple<FxSlot<StereoWidth>> slots_{};
+    std::tuple<FxSlot<StereoDelay>, FxSlot<StereoWidth>> slots_{};
     Gain output_{};
     int maxBlock_ = 512;
 };

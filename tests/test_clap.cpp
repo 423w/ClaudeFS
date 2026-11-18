@@ -120,7 +120,8 @@ struct Plugin {
     FssClap& impl() { return *FssClap::self(p); }
 
     /// One block. Null left = no audio buffers at all; null right = a 1-channel bus.
-    clap_process_status run(std::uint32_t frames, InList* in, OutList* out, float* left, float* right)
+    clap_process_status run(std::uint32_t frames, InList* in, OutList* out, float* left, float* right,
+                            const clap_event_transport* transport = nullptr)
     {
         InList empty;
         OutList sink;
@@ -134,6 +135,7 @@ struct Plugin {
         proc.audio_outputs_count = left ? 1u : 0u;
         proc.in_events = in ? &in->iface : &empty.iface;
         proc.out_events = out ? &out->iface : &sink.iface;
+        proc.transport = transport; // L5.3: the host's tempo
         return p->process(p, &proc);
     }
     double value(std::uint32_t id)
@@ -535,4 +537,30 @@ TEST_CASE("clap plugin: clap.tail reports the FX chain's tail (none until an eff
     pl.run(64, &in, nullptr, l.data(), r.data());
     CHECK(pl.impl().mainPatch().fx.width.enabled);
     CHECK(tail->get(pl.p) == 0u);
+}
+
+TEST_CASE("clap plugin: the host tempo (transport) reaches the synced delay, and clap.tail follows it", "[clap][fx]")
+{
+    Plugin pl;
+    const auto* tail = static_cast<const clap_plugin_tail*>(pl.p->get_extension(pl.p, CLAP_EXT_TAIL));
+    REQUIRE(tail != nullptr);
+    InList in;
+    in.param(0, synth::param_id::kDelayOn, 1.0);
+    in.param(0, synth::param_id::kDelayFeedback, plugin::toHost(*synth::findParam(synth::param_id::kDelayFeedback), 0.0f));
+    std::vector<float> l(64), r(64);
+    clap_event_transport tr{};
+    tr.header = {sizeof tr, 0, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_TRANSPORT, 0};
+    tr.flags = CLAP_TRANSPORT_HAS_TEMPO;
+    tr.tempo = 90.0;
+    pl.run(64, &in, nullptr, l.data(), r.data(), &tr);
+    // 1/8 dotted at 90 BPM = 0.5 s = 24000 samples; feedback 0 = one echo: tail = 24000 + 1.
+    CHECK(tail->get(pl.p) == 24001u);
+    // A mid-block tempo change, as a CLAP_EVENT_TRANSPORT event.
+    InList in2;
+    clap_event_transport ev = tr;
+    ev.header.time = 10;
+    ev.tempo = 120.0;
+    in2.add(ev);
+    pl.run(64, &in2, nullptr, l.data(), r.data(), &tr); // the block starts at 90, changes at frame 10
+    CHECK(tail->get(pl.p) == 18001u);
 }

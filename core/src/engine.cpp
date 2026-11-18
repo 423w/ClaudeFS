@@ -28,6 +28,7 @@ void Engine::prepare(double sampleRate, int maxBlockSize, float stealFadeMs)
         v.prepare(sampleRate, stealFadeMs, levelMs);
     matrixK_ = matrixMs > 0.0f ? static_cast<float>(1.0 - std::exp(-1.0 / (matrixMs * 0.001 * sampleRate))) : 1.0f;
     fx_.prepare(sampleRate, maxBlockSize, gainMs); // allocates: effect buffers and slot scratch
+    fx_.setTempo(tempoBpm_);
     cutoffOctaves_.prepare(sampleRate, cutoffMs);
     q_.prepare(sampleRate, qMs);
     lfo2_.prepare(sampleRate);
@@ -160,6 +161,12 @@ void Engine::handle(const Event& e) noexcept
         break;
     case Event::Type::Controller:
         controller(e);
+        break;
+    case Event::Type::Tempo:
+        if (e.value > 0.0f && std::isfinite(e.value)) { // a broken transport must not set a 0 or NaN tempo
+            tempoBpm_ = e.value;
+            fx_.setTempo(tempoBpm_); // synced delay times retarget (Clean: crossfade, Tape: glide)
+        }
         break;
     }
 }

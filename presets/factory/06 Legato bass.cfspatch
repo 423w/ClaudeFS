@@ -44,6 +44,17 @@ name = Legato bass
 52 = 1              # Glide legato (On)
 53 = 0              # Priority (Last)
 
+# Delay
+210 = 0             # Delay on (Off)
+212 = 1             # Delay sync (On)
+213 = 6             # Delay note (1/8 D)
+211 = 375           # Delay time [ms]
+214 = 35            # Delay feedback [%]
+216 = 6000          # Delay damping [Hz]
+215 = 1             # Delay ping-pong (On)
+218 = 0             # Delay glide (Clean)
+217 = 25            # Delay mix [%]
+
 # Width
 200 = 0             # Width on (Off)
 201 = 100           # Width [%]

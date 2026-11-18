@@ -317,6 +317,13 @@ void drawMain(synth::Patch& patch, PlayHost& host, const standalone::DeviceInfo&
         ImGui::TextDisabled("%s", status.c_str());
     if (ImGui::Button("Panic"))
         host.post({Event::Type::AllNotesOff});
+    // Tempo (L5.3): fss_play has no transport, so the synced delay uses this (Engine default 120 BPM).
+    // Not part of the patch: like a DAW's tempo, it belongs to the session, not the sound.
+    ImGui::SameLine();
+    static float bpm = static_cast<float>(Engine::kDefaultTempoBpm);
+    ImGui::SetNextItemWidth(ImGui::GetFontSize() * 6.0f);
+    if (ImGui::DragFloat("BPM", &bpm, 0.25f, 20.0f, 300.0f, "%.1f"))
+        host.post(Event::tempo(0, bpm));
 
     std::string_view group;
     for (const synth::ParamInfo& p : synth::kParams) {

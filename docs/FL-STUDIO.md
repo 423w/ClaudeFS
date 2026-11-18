@@ -57,7 +57,7 @@ Record a knob gesture:
 3. Draw an automation clip by hand from 0 % to 100 %.
    - Expect: the knob sweeps 20 Hz → 20 kHz with the clip's *middle* at about **630 Hz** (CFS exposes continuous
      parameters as knob positions, so the sweep is even in pitch, not in Hz: see DECISIONS.md, L3.2 entry).
-4. FL's own parameter list: in the wrapper menu, **Browse parameters**. Expect 84 parameters as of L5.1 (32 global + 13 per operator; Phase F adds more, see section 7), grouped with
+4. FL's own parameter list: in the wrapper menu, **Browse parameters**. Expect 93 parameters as of L5.3 (41 global + 13 per operator; Phase F adds more, see section 7), grouped with
    names like "Cutoff", "Op A Ratio"; menus (filter mode, LFO shape) show names, not numbers.
 
 ## 5. Save with the project
@@ -96,3 +96,24 @@ Each lesson adds a subsection. Reinstall the plugin after each build (`tools\ins
      difference between the channels. This step checks that switching an effect while playing doesn't click.
 3. FL's parameter list (**Browse parameters**) now ends with "Width on" and "Width" in a "Width" module.
 4. Optional, with `CFS_CLAP_TRACE=1`: nothing new to look for yet; the tail extension reports 0 until the delay.
+
+### L5.3: the synced delay at the project tempo
+1. Set FL's tempo to **120**. Load the **E-piano** preset. On the FX page, switch the Delay **On** (defaults:
+   Sync on, Note **1/8 D**, Feedback 35 %, Ping-pong on, Mix 25 %).
+2. Play short staccato notes, with headphones.
+   - Expect: echoes every **375 ms**, the first on the **left**, the next on the right, and so on, each a
+     little quieter and a little darker.
+3. Change FL's tempo to **90** while holding a note or letting echoes ring.
+   - Expect: the echoes move to **500 ms** within a beat, with no click (Glide = Clean: a 50 ms crossfade).
+4. Turn **Sync** off and sweep **Time** with the mouse while echoes ring, first with Glide = **Clean** (stepwise,
+   no pitch change), then **Tape** (the echoes bend up as you shorten the time, down as you lengthen it).
+   - Report: does Clean ever tick? Does Tape sound like a tape echo or like a glitch?
+5. Switch the delay **Off** while echoes ring.
+   - Expect: the echoes already sounding **ring out**; new notes have no echo.
+6. Draw a **tempo ramp** in FL's playlist (tempo automation) from 120 to 140 over two bars with the delay synced.
+   - Report: do the echoes follow smoothly, or in audible steps?
+7. With `CFS_CLAP_TRACE=1`, stop playback and look at the last "audio thread summary" line in
+   `%TEMP%\cfs_clap_trace.txt`: it now ends with `tempo <first> -> <last> BPM (<n> changes)`. If it says
+   `tempo 0.000`, FL isn't sending a transport to CFS and sync falls back to 120 BPM. Please report that line.
+8. Render the pattern to WAV with the delay on and high feedback (FL's export): the file should include the
+   echoes after the last note (CFS reports its tail through `clap.tail`). Report whether the tail gets cut.

@@ -44,6 +44,15 @@ float getParam(const Patch& patch, const ParamInfo& p) noexcept
         case param_id::kGlideLegato: return patch.voice.glideLegatoOnly ? 1.0f : 0.0f;
         case param_id::kPriority: return static_cast<float>(patch.voice.priority);
         case param_id::kWidthOn: return patch.fx.width.enabled ? 1.0f : 0.0f;
+        case param_id::kDelayOn: return patch.fx.delay.enabled ? 1.0f : 0.0f;
+        case param_id::kDelayTime: return patch.fx.delay.timeMs;
+        case param_id::kDelaySync: return patch.fx.delay.sync ? 1.0f : 0.0f;
+        case param_id::kDelayDivision: return static_cast<float>(patch.fx.delay.division);
+        case param_id::kDelayFeedback: return patch.fx.delay.feedbackPct;
+        case param_id::kDelayPingPong: return patch.fx.delay.pingPong ? 1.0f : 0.0f;
+        case param_id::kDelayDamping: return patch.fx.delay.dampingHz;
+        case param_id::kDelayMix: return patch.fx.delay.mixPct;
+        case param_id::kDelayTimeMode: return static_cast<float>(patch.fx.delay.timeMode);
         case param_id::kWidth: return patch.fx.width.widthPct;
         default: return p.def;
         }
@@ -113,6 +122,15 @@ void setParam(Patch& patch, const ParamInfo& p, float plain) noexcept
         case param_id::kGlideLegato: patch.voice.glideLegatoOnly = v >= 0.5f; return;
         case param_id::kPriority: patch.voice.priority = static_cast<NotePriority>(static_cast<int>(v)); return;
         case param_id::kWidthOn: patch.fx.width.enabled = v >= 0.5f; return;
+        case param_id::kDelayOn: patch.fx.delay.enabled = v >= 0.5f; return;
+        case param_id::kDelayTime: patch.fx.delay.timeMs = v; return;
+        case param_id::kDelaySync: patch.fx.delay.sync = v >= 0.5f; return;
+        case param_id::kDelayDivision: patch.fx.delay.division = static_cast<std::uint8_t>(v); return;
+        case param_id::kDelayFeedback: patch.fx.delay.feedbackPct = v; return;
+        case param_id::kDelayPingPong: patch.fx.delay.pingPong = v >= 0.5f; return;
+        case param_id::kDelayDamping: patch.fx.delay.dampingHz = v; return;
+        case param_id::kDelayMix: patch.fx.delay.mixPct = v; return;
+        case param_id::kDelayTimeMode: patch.fx.delay.timeMode = static_cast<fx::DelayTimeMode>(static_cast<int>(v)); return;
         case param_id::kWidth: patch.fx.width.widthPct = v; return;
         default: return;
         }
@@ -155,6 +173,10 @@ std::string_view valueLabel(const ParamInfo& p, int value) noexcept
         return pick({"Sine", "Triangle", "Saw up", "Saw down", "Square", "Sample & hold", "Smooth random"});
     case param_id::kVoiceMode: return pick({"Poly", "Mono", "Legato"});
     case param_id::kPriority: return pick({"Last", "Low", "High"});
+    case param_id::kDelayDivision:
+        return value >= 0 && value < fx::kNumDelayDivisions ? fx::kDelayDivisions[static_cast<std::size_t>(value)].name
+                                                             : std::string_view{};
+    case param_id::kDelayTimeMode: return pick({"Clean", "Tape"});
     default: break;
     }
     if (p.unit == "on/off")

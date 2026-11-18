@@ -34,6 +34,8 @@ public:
     static constexpr int kMaxPolyphony = 16;
     static constexpr int kStealHeadroom = 4; // voices that can be fading out while 16 others sound
     static constexpr int kNumVoices = kMaxPolyphony + kStealHeadroom;
+    /// The tempo until a host says otherwise (Event::Type::Tempo, L5.3): fss_play and fss_render use it.
+    static constexpr double kDefaultTempoBpm = 120.0;
 
     /// May allocate (since L5.1 the FX chain's buffers live here), so it isn't noexcept: a host that must not
     /// throw (the CLAP plugin's activate) catches std::bad_alloc and reports failure.
@@ -74,6 +76,7 @@ public:
     /// An effect with a tail (delay, reverb) is still running: the output may change though no voice sounds.
     [[nodiscard]] bool fxRinging() const noexcept { return fx_.ringing(); }
     [[nodiscard]] const fx::FxChain& fx() const noexcept { return fx_; }
+    [[nodiscard]] double tempoBpm() const noexcept { return tempoBpm_; }
 
 private:
     void processEvents(std::span<const Event> events, float* outL, float* outR, int numFrames) noexcept;
@@ -117,6 +120,7 @@ private:
     bool hasLastPitch_ = false;
     std::uint64_t noteCounter_ = 0, steals_ = 0;
     std::uint64_t nonFiniteBlocks_ = 0;
+    double tempoBpm_ = kDefaultTempoBpm; // the host's (L5.3); survives reset() and setPatch(): the song owns it
 };
 
 /// The output stage's safety soft clip: transparent below ±0.8, then a smooth knee that never exceeds ±1.

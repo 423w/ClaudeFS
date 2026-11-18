@@ -70,6 +70,10 @@ void caption(const ParamInfo& p, char* out, std::size_t size)
             n.remove_prefix(prefix.size());
             break;
         }
+    // FX (L5.1): a parameter named after its own group ("Delay feedback" in the Delay panel) drops the group
+    // name, since the panel's title already says it. ("Width" alone stays: nothing would be left.)
+    if (n.size() > p.group.size() + 1 && n.starts_with(p.group) && n[p.group.size()] == ' ')
+        n.remove_prefix(p.group.size() + 1);
     std::snprintf(out, size, "%.*s", static_cast<int>(n.size()), n.data());
     if (out[0] >= 'a' && out[0] <= 'z')
         out[0] = static_cast<char>(out[0] - 'a' + 'A');

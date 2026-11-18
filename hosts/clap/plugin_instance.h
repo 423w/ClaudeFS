@@ -126,6 +126,7 @@ private:
     void applyParam(std::size_t index, float plain, std::uint32_t frame) noexcept;
     void renderEngine(float* outL, float* outR, std::uint32_t frames) noexcept;
     void reportNoteEnds(const clap_output_events* out, std::uint32_t frames) noexcept;
+    void tempoEvent(double bpm, std::uint32_t frame) noexcept; // L5.3: a changed host tempo → Event::Type::Tempo
     void pollAudio(); // [main] fold fromAudio_ into mirror_
     void pushUi(const UiMsg& m);
 
@@ -147,6 +148,8 @@ private:
     static constexpr std::size_t kSplitAt = kMaxEvents - 64; // room for one CLAP event's worth of fss::Events
     std::array<Event, kMaxEvents> events_{};
     std::size_t numEvents_ = 0;
+    double blockTempo_ = 0.0; // [audio] this block's clap_process.transport tempo (0 = none)
+    double lastTempo_ = 0.0;  // [audio] the tempo the Engine last got from us
     std::bitset<kNumParams> touched_; // parameters applied this block, to publish back to the main thread
     static constexpr std::uint32_t kScratchFrames = 512;
     std::array<float, kScratchFrames> scratchL_{}, scratchR_{}; // when the host gives us no (or 1) channel

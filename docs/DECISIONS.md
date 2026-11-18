@@ -480,6 +480,21 @@ Serum or Vital): then a variant of effect types per slot is the natural fit (no 
 pattern they'll meet in every plugin framework (JUCE's `AudioProcessor`), and the measured cost says that's a
 perfectly good reason.
 
+### 2026-11-18: L5.3 delay conventions (CFS; not a numbered decision)
+**Decision.** (1) A delay-time change is a **50 ms crossfade between two read taps** by default ("Clean"),
+with a **gliding read position** ("Tape", the pitch-bending warble) as an option (`Delay glide`). (2) Clean
+reads **whole samples**; only Tape interpolates (linear). (3) **Tempo is an event, not a parameter**
+(`Event::Type::Tempo`; the Engine keeps it across patches; 120 BPM without a host transport).
+**Options considered.** Tape only; Clean only; fractional reads for both; tempo as an automatable parameter.
+**Why.** A synced delay retargets on every host tempo change, which in Tape mode would swoop each time. A
+fractional linear read darkens every repeat by a tempo-dependent amount (measured: −3.01 dB per pass at fs/4
+for a half-sample fraction). The tempo belongs to the song, not the sound: presets mustn't carry one.
+**Revisit if:** modulated delays (L5.4) need a shared fractional read anyway, or a cubic read becomes cheap
+enough to use everywhere; or a host's tempo ramps make Clean's 50 ms steps audible.
+**The owner might choose differently if:** they want the delay to always behave like tape (simpler, one code
+path, and plenty of hardware does exactly that), or they want a fallback tempo stored in the patch so a preset
+sounds the same in a standalone app (some synths do this).
+
 <!-- Append entries like:
 ### 2026-11-20: D5 decided: double phase in [0,1)
 Why: ...

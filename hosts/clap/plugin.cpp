@@ -186,6 +186,8 @@ clap_process_status FssClap::process(const clap_process* p) noexcept
     if (!outL)
         ++stats_.noBuffers;
 
+    // The host's tempo at the start of this block (L5.3). Mid-block changes arrive as CLAP_EVENT_TRANSPORT.
+    blockTempo_ = (p->transport && (p->transport->flags & CLAP_TRANSPORT_HAS_TEMPO)) ? p->transport->tempo : 0.0;
     runBlock(p->in_events, p->out_events, frames, outL, outR);
 
     // Silence detection, for the host: CLAP_PROCESS_SLEEP means "call me again only when there are events",
@@ -222,6 +224,7 @@ void FssClap::paramsFlush(const clap_input_events* in, const clap_output_events*
     // the Engine (there is no audio thread), so applying changes to it directly is safe.
     const util::RealtimeGuard rt;
     ++stats_.flushCalls;
+    blockTempo_ = 0.0; // a flush has no transport
     runBlock(in, out, 0, nullptr, nullptr);
 }
 
@@ -236,6 +239,8 @@ void FssClap::runBlock(const clap_input_events* in, const clap_output_events* ou
     //    queue's leftovers after it would end on a stale value. (A unit test caught exactly that.)
     if (drainUi(out) && resync_.exchange(false, std::memory_order_acquire))
         resyncFromMain(out);
+    if (blockTempo_ > 0.0)
+        tempoEvent(blockTempo_, 0); // only becomes an Event if the tempo changed
 
     // 2. The host's events, already sorted by time. Each becomes 0..n fss::Events at the same frame. If our
     //    fixed event list fills up (thousands of events in one block), render up to that event and start
@@ -393,7 +398,13 @@ void FssClap::translate(const clap_event_header* h, std::uint32_t frame, std::ui
     }
     case CLAP_EVENT_PARAM_MOD: ++stats_.paramMod; return; // no parameter is declared modulatable (until L4.1)
     case CLAP_EVENT_NOTE_EXPRESSION: ++stats_.noteExpression; return; // per-note expression: later
-    case CLAP_EVENT_TRANSPORT: ++stats_.transport; return;            // tempo sync arrives with L5.3
+    case CLAP_EVENT_TRANSPORT: { // L5.3: a sample-accurate tempo change inside the block
+        ++stats_.transport;
+        const auto* ev = reinterpret_cast<const clap_event_transport*>(h);
+        if (ev->flags & CLAP_TRANSPORT_HAS_TEMPO)
+            tempoEvent(ev->tempo, frame);
+        return;
+    }
     default: ++stats_.other; return;
     }
 }
@@ -425,6 +436,20 @@ void FssClap::renderEngine(float* outL, float* outR, std::uint32_t frames) noexc
         first = last;
         done += len;
     } while (done < frames);
+}
+
+void FssClap::tempoEvent(double bpm, std::uint32_t frame) noexcept
+{
+    // FL Studio (like most hosts) sends the transport with every block; the Engine only needs to hear about
+    // changes. A tempo outside 20..999 BPM or not finite is a host bug: ignored.
+    if (!(bpm >= 20.0 && bpm <= 999.0) || bpm == lastTempo_ || numEvents_ >= kMaxEvents)
+        return;
+    if (stats_.firstTempo == 0.0)
+        stats_.firstTempo = bpm;
+    stats_.lastTempo = bpm;
+    ++stats_.tempoChanges;
+    lastTempo_ = bpm;
+    events_[numEvents_++] = Event::tempo(frame, static_cast<float>(bpm));
 }
 
 void FssClap::reportNoteEnds(const clap_output_events* out, std::uint32_t frames) noexcept
