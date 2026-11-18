@@ -191,6 +191,18 @@ inline Patch marimba()
     return p;
 }
 
+/// E-piano + chorus (L5.4): the classic pairing. The E-piano patch untouched (so `l1.7_piece.wav`, which uses
+/// it, keeps its hash), with a slow two-voice chorus at 50 % and the width opened a little, because the
+/// chorus is what makes the mono voice stereo. A new preset rather than a change to "E-piano": players can
+/// A/B the two.
+inline Patch epianoChorus()
+{
+    Patch p = epiano();
+    p.fx.chorus = {.enabled = true, .rateHz = 0.5f, .depthMs = 3.5f, .delayMs = 8.0f, .voices = 2, .mixPct = 50.0f};
+    p.fx.width = {.enabled = true, .widthPct = 130.0f};
+    return p;
+}
+
 /// The factory list hosts show (fss_play, the plugin editor). Since L3.4 the factory bank also exists as
 /// text files in presets/factory/ (written from these functions by `fss_render l3.4`; a test checks that
 /// the files and these functions agree), so the files are what users read, copy and edit.
@@ -209,6 +221,7 @@ inline constexpr NamedPreset kFactoryPresets[] = {
     {"Brass", brass},
     {"Organ", organ},
     {"Marimba", marimba},
+    {"E-piano chorus", epianoChorus}, // L5.4. Append only: the list position is the file number ("11 ...")
     {"Init", [] { return Patch{}; }},
 };
 

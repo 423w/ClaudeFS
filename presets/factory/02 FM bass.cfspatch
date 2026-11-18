@@ -44,6 +44,31 @@ name = FM bass
 52 = 1              # Glide legato (On)
 53 = 0              # Priority (Last)
 
+# Chorus
+220 = 0             # Chorus on (Off)
+221 = 0.6           # Chorus rate [Hz]
+222 = 3             # Chorus depth [ms]
+223 = 10            # Chorus delay [ms]
+224 = 2             # Chorus voices
+225 = 50            # Chorus mix [%]
+
+# Flanger
+230 = 0             # Flanger on (Off)
+231 = 0.2           # Flanger rate [Hz]
+232 = 0.5           # Flanger delay [ms]
+233 = 3             # Flanger depth [ms]
+234 = 50            # Flanger feedback [%]
+235 = 50            # Flanger mix [%]
+
+# Phaser
+240 = 0             # Phaser on (Off)
+241 = 0.3           # Phaser rate [Hz]
+242 = 800           # Phaser center [Hz]
+243 = 2             # Phaser depth [oct]
+244 = 40            # Phaser feedback [%]
+245 = 6             # Phaser stages
+246 = 50            # Phaser mix [%]
+
 # Delay
 210 = 0             # Delay on (Off)
 212 = 1             # Delay sync (On)

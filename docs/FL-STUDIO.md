@@ -57,7 +57,7 @@ Record a knob gesture:
 3. Draw an automation clip by hand from 0 % to 100 %.
    - Expect: the knob sweeps 20 Hz → 20 kHz with the clip's *middle* at about **630 Hz** (CFS exposes continuous
      parameters as knob positions, so the sweep is even in pitch, not in Hz: see DECISIONS.md, L3.2 entry).
-4. FL's own parameter list: in the wrapper menu, **Browse parameters**. Expect 93 parameters as of L5.3 (41 global + 13 per operator; Phase F adds more, see section 7), grouped with
+4. FL's own parameter list: in the wrapper menu, **Browse parameters**. Expect 112 parameters as of L5.4 (60 global + 13 per operator; Phase F adds more, see section 7), grouped with
    names like "Cutoff", "Op A Ratio"; menus (filter mode, LFO shape) show names, not numbers.
 
 ## 5. Save with the project
@@ -117,3 +117,18 @@ Each lesson adds a subsection. Reinstall the plugin after each build (`tools\ins
    `tempo 0.000`, FL isn't sending a transport to CFS and sync falls back to 120 BPM. Please report that line.
 8. Render the pattern to WAV with the delay on and high feedback (FL's export): the file should include the
    echoes after the last note (CFS reports its tail through `clap.tail`). Report whether the tail gets cut.
+
+### L5.4: chorus on the e-piano, flanger, phaser
+1. Load **E-piano**, play a few chords, then load **E-piano chorus** (the new factory preset) and play the same.
+   - Expect: the chorused one is **wider** (the sound spreads left and right on headphones) and gently
+     swirling, at about the same loudness (it measures 2 dB quieter in mono, about equal in stereo).
+   - Report: does it sound like the classic chorused FM e-piano? Too much, too little? (Try Chorus **Rate**
+     0.3–1 Hz and **Depth** 2–5 ms; **Voices** 1 is the leanest, 4 the lushest.)
+2. Press FL's **mono** button on the master (or pan CFS's mixer track to mono) with E-piano chorus.
+   - Expect: it gets narrower and a little quieter, but doesn't hollow out or go "phasey".
+3. On any bright patch (Brass, Organ), switch **Flanger on**: a slow jet sweep. Raise **Feedback** to 80 %:
+   it starts to ring at a pitch that moves. Set it to **−80 %**: hollower, more nasal.
+4. Switch the flanger off and the **Phaser on**: a smoother swirl with no pitch to it. Change **Stages** from 4 to
+   12 while a note holds.
+   - Expect: more stages = more notches = a deeper, more complex sweep, and the change makes no click.
+5. Change **Voices** on the chorus while holding a chord: no clicks, the swirl just thickens or thins.

@@ -1,10 +1,10 @@
 // fss/fx/fx_chain.h: the global FX chain after the voice sum (L5.1, D16).
 //
-//   voices (mono sum) ─► [ delay ] ─► [ width ] ─► output gain ─► (Engine: safety soft clip)
+//   voices (mono sum) ─► [ chorus ] ─► [ flanger ] ─► [ phaser ] ─► [ delay ] ─► [ width ] ─► output gain ─► clip
 //                        └── FxSlots, fixed order; later lessons insert theirs ──┘
 //
 // The planned order, each lesson inserting its slot where it belongs:
-//   drive (L5.2) → chorus (L5.4) → delay (L5.3) → reverb (L5.5) → EQ (L5.6) → width → output gain
+//   drive (L5.2) → chorus → flanger → phaser (L5.4) → delay (L5.3) → reverb (L5.5) → EQ (L5.6) → width → output
 // Why this order: distortion before anything that spreads the sound in time (distorting a reverb makes mud);
 // modulation before echoes, so every repeat carries the chorus; reverb after the delay, so the echoes sit in
 // the room; EQ on the finished sound; width last, so it widens what the stereo effects made; the output level
@@ -15,10 +15,13 @@
 // virtual calls. Adding an effect = one type in the tuple, one line in setParams().
 #pragma once
 
+#include <fss/fx/chorus.h>
 #include <fss/fx/delay.h>
 #include <fss/fx/effect.h>
+#include <fss/fx/flanger.h>
 #include <fss/fx/fx_params.h>
 #include <fss/fx/gain.h>
+#include <fss/fx/phaser.h>
 #include <fss/fx/width.h>
 
 #include <algorithm>
@@ -46,6 +49,15 @@ public:
     /// New settings (targets: switches fade, smoothed values glide). Real-time safe.
     void setParams(const FxParams& p) noexcept
     {
+        auto& chorus = std::get<FxSlot<Chorus>>(slots_);
+        chorus.setEnabled(p.chorus.enabled);
+        chorus.effect().setParams(p.chorus);
+        auto& flanger = std::get<FxSlot<Flanger>>(slots_);
+        flanger.setEnabled(p.flanger.enabled);
+        flanger.effect().setParams(p.flanger);
+        auto& phaser = std::get<FxSlot<Phaser>>(slots_);
+        phaser.setEnabled(p.phaser.enabled);
+        phaser.effect().setParams(p.phaser);
         auto& delay = std::get<FxSlot<StereoDelay>>(slots_);
         delay.setEnabled(p.delay.enabled);
         delay.effect().setParams(p.delay);
@@ -88,7 +100,7 @@ public:
     [[nodiscard]] const FxSlot<StereoDelay>& delay() const noexcept { return std::get<FxSlot<StereoDelay>>(slots_); }
 
 private:
-    std::tuple<FxSlot<StereoDelay>, FxSlot<StereoWidth>> slots_{};
+    std::tuple<FxSlot<Chorus>, FxSlot<Flanger>, FxSlot<Phaser>, FxSlot<StereoDelay>, FxSlot<StereoWidth>> slots_{};
     Gain output_{};
     int maxBlock_ = 512;
 };

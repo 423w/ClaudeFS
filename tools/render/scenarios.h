@@ -23,5 +23,6 @@ void renderL2_6(const std::filesystem::path& outDir); // l2_6.cpp: CPU per voice
 void renderL3_4(const std::filesystem::path& outDir); // l3_4.cpp: factory bank files + a render of every preset
 void renderL5_1(const std::filesystem::path& outDir); // l5_1.cpp: FX slot switching (clicks), D16 dispatch timing
 void renderL5_3(const std::filesystem::path& outDir); // l5_3.cpp: delay line, synced delay, time changes, spill
+void renderL5_4(const std::filesystem::path& outDir); // l5_4.cpp: chorus e-piano, flanger vs phaser, interpolation
 
 } // namespace fss::render

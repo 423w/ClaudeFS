@@ -77,7 +77,8 @@ struct ParamInfo {
 namespace param_id {
 // Globals are numbered in groups of ten so related ids stay together: 1-9 global, 10-19 filter (L1.10),
 // 30-39 LFO 1 + vibrato, 40-49 LFO 2 (L1.11), 50-59 voice / playing (L2.5).
-// FX (L5.1) get a hundred of their own, ten per effect: 200-209 width, 210-219 delay (L5.3).
+// FX (L5.1) get a hundred of their own, ten per effect: 200-209 width, 210-219 delay (L5.3),
+// 220-229 chorus, 230-239 flanger, 240-249 phaser (L5.4).
 inline constexpr std::uint32_t kAlgorithm = 1, kOutputDb = 2, kTuningA4 = 3, kBendRange = 4;
 inline constexpr std::uint32_t kFilterMode = 10, kCutoff = 11, kResonance = 12, kFilterEnvAmount = 13,
                                kKeyTrack = 14, kFilterVel = 15, kFilterAttack = 16, kFilterDecay = 17,
@@ -90,6 +91,12 @@ inline constexpr std::uint32_t kWidthOn = 200, kWidth = 201;
 inline constexpr std::uint32_t kDelayOn = 210, kDelayTime = 211, kDelaySync = 212, kDelayDivision = 213,
                                kDelayFeedback = 214, kDelayPingPong = 215, kDelayDamping = 216, kDelayMix = 217,
                                kDelayTimeMode = 218;
+inline constexpr std::uint32_t kChorusOn = 220, kChorusRate = 221, kChorusDepth = 222, kChorusDelay = 223,
+                               kChorusVoices = 224, kChorusMix = 225;
+inline constexpr std::uint32_t kFlangerOn = 230, kFlangerRate = 231, kFlangerDelay = 232, kFlangerDepth = 233,
+                               kFlangerFeedback = 234, kFlangerMix = 235;
+inline constexpr std::uint32_t kPhaserOn = 240, kPhaserRate = 241, kPhaserCenter = 242, kPhaserDepth = 243,
+                               kPhaserFeedback = 244, kPhaserStages = 245, kPhaserMix = 246;
 constexpr std::uint32_t op(int opIndex, OpField f) { return 1000u + 100u * static_cast<std::uint32_t>(opIndex) + static_cast<std::uint32_t>(f); }
 } // namespace param_id
 
@@ -169,6 +176,26 @@ inline constexpr ParamInfo kGlobalParams[] = {
     {param_id::kPriority, "Priority", "", 0.0f, 2.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Play, -1, {}, "Voice"},
     // ---- FX chain (L5.1). Smoothing happens inside the effects, so smoothingMs is 0 here. ----
     // Table order = chain order (the editor's FX page draws the groups left to right in this order).
+    // Chorus, flanger, phaser (L5.4): the modulation effects, before the delay so every echo carries them.
+    {param_id::kChorusOn, "Chorus on", "on/off", 0.0f, 1.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Fx, -1, {}, "Chorus"},
+    {param_id::kChorusRate, "Chorus rate", "Hz", 0.05f, 5.0f, 0.6f, Skew::Exp, 0.0f, 0, ParamTarget::Fx, -1, {}, "Chorus"},
+    {param_id::kChorusDepth, "Chorus depth", "ms", 0.0f, 10.0f, 3.0f, Skew::Linear, 0.0f, 0, ParamTarget::Fx, -1, {}, "Chorus"},
+    {param_id::kChorusDelay, "Chorus delay", "ms", 1.0f, 30.0f, 10.0f, Skew::Exp, 0.0f, 0, ParamTarget::Fx, -1, {}, "Chorus"},
+    {param_id::kChorusVoices, "Chorus voices", "", 1.0f, 4.0f, 2.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Fx, -1, {}, "Chorus"},
+    {param_id::kChorusMix, "Chorus mix", "%", 0.0f, 100.0f, 50.0f, Skew::Linear, 0.0f, 0, ParamTarget::Fx, -1, {}, "Chorus"},
+    {param_id::kFlangerOn, "Flanger on", "on/off", 0.0f, 1.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Fx, -1, {}, "Flanger"},
+    {param_id::kFlangerRate, "Flanger rate", "Hz", 0.02f, 5.0f, 0.2f, Skew::Exp, 0.0f, 0, ParamTarget::Fx, -1, {}, "Flanger"},
+    {param_id::kFlangerDelay, "Flanger delay", "ms", 0.1f, 10.0f, 0.5f, Skew::Exp, 0.0f, 0, ParamTarget::Fx, -1, {}, "Flanger"},
+    {param_id::kFlangerDepth, "Flanger depth", "ms", 0.0f, 10.0f, 3.0f, Skew::Linear, 0.0f, 0, ParamTarget::Fx, -1, {}, "Flanger"},
+    {param_id::kFlangerFeedback, "Flanger feedback", "%", -95.0f, 95.0f, 50.0f, Skew::Linear, 0.0f, 0, ParamTarget::Fx, -1, {}, "Flanger"},
+    {param_id::kFlangerMix, "Flanger mix", "%", 0.0f, 100.0f, 50.0f, Skew::Linear, 0.0f, 0, ParamTarget::Fx, -1, {}, "Flanger"},
+    {param_id::kPhaserOn, "Phaser on", "on/off", 0.0f, 1.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Fx, -1, {}, "Phaser"},
+    {param_id::kPhaserRate, "Phaser rate", "Hz", 0.02f, 5.0f, 0.3f, Skew::Exp, 0.0f, 0, ParamTarget::Fx, -1, {}, "Phaser"},
+    {param_id::kPhaserCenter, "Phaser center", "Hz", 100.0f, 5000.0f, 800.0f, Skew::Exp, 0.0f, 0, ParamTarget::Fx, -1, {}, "Phaser"},
+    {param_id::kPhaserDepth, "Phaser depth", "oct", 0.0f, 4.0f, 2.0f, Skew::Linear, 0.0f, 0, ParamTarget::Fx, -1, {}, "Phaser"},
+    {param_id::kPhaserFeedback, "Phaser feedback", "%", 0.0f, 90.0f, 40.0f, Skew::Linear, 0.0f, 0, ParamTarget::Fx, -1, {}, "Phaser"},
+    {param_id::kPhaserStages, "Phaser stages", "", 2.0f, 12.0f, 6.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Fx, -1, {}, "Phaser"},
+    {param_id::kPhaserMix, "Phaser mix", "%", 0.0f, 100.0f, 50.0f, Skew::Linear, 0.0f, 0, ParamTarget::Fx, -1, {}, "Phaser"},
     // Delay (L5.3). Division: index into fx::kDelayDivisions (6 = 1/8 dotted). Time mode: 0 Clean, 1 Tape.
     {param_id::kDelayOn, "Delay on", "on/off", 0.0f, 1.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Fx, -1, {}, "Delay"},
     {param_id::kDelaySync, "Delay sync", "on/off", 0.0f, 1.0f, 1.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Fx, -1, {}, "Delay"},

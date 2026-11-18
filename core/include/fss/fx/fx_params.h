@@ -51,8 +51,43 @@ struct DelayParams {
     DelayTimeMode timeMode = DelayTimeMode::Clean;
 };
 
+/// Chorus (L5.4): `voices` copies of the input, each read from a delay that an LFO sweeps between delayMs and
+/// delayMs + depthMs. Each voice has a fixed LFO offset (0, ½, ¼, ¾ cycle); the right channel is 90° on.
+struct ChorusParams {
+    bool enabled = false;
+    float rateHz = 0.6f;
+    float depthMs = 3.0f;     // how far each voice's delay swings (peak to peak)
+    float delayMs = 10.0f;    // the shortest delay of the swing
+    std::uint8_t voices = 2;  // 1..4
+    float mixPct = 50.0f;     // equal-power mix: copies 10 ms late and moving are uncorrelated with the dry sound
+};
+
+/// Flanger (L5.4): one short delay swept by an LFO, with feedback: a moving comb filter.
+struct FlangerParams {
+    bool enabled = false;
+    float rateHz = 0.2f;
+    float delayMs = 0.5f;      // the shortest delay of the sweep
+    float depthMs = 3.0f;      // sweep width (peak to peak)
+    float feedbackPct = 50.0f; // −95..95: negative flips which frequencies resonate
+    float mixPct = 50.0f;      // 50 % = the deepest notches
+};
+
+/// Phaser (L5.4): first-order allpass stages swept by an LFO, mixed with the dry sound: N/2 moving notches.
+struct PhaserParams {
+    bool enabled = false;
+    float rateHz = 0.3f;
+    float centerHz = 800.0f;   // the stages' break frequency at the middle of the sweep
+    float depthOct = 2.0f;     // ± octaves around the centre
+    float feedbackPct = 40.0f; // 0..90
+    std::uint8_t stages = 6;   // 2..12
+    float mixPct = 50.0f;
+};
+
 /// Everything the FX chain needs. One member per effect, in chain order (fx_chain.h).
 struct FxParams {
+    ChorusParams chorus{};
+    FlangerParams flanger{};
+    PhaserParams phaser{};
     DelayParams delay{};
     WidthParams width{};
 };

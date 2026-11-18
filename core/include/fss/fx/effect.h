@@ -44,11 +44,14 @@ concept StereoEffect = requires(E fx, const E cfx, StereoBlock b, double sampleR
 
 // ---- dry/wet laws ---------------------------------------------------------------------------------------
 // Effects with a mix knob pick one of these. Which is right depends on how alike dry and wet are:
-//   LINEAR   dry = 1 − m, wet = m. Correct when wet ≈ dry (a short chorus, a filter): two coherent signals
-//            add as amplitudes, so 0.5 + 0.5 keeps the level, where equal power would bump it by +3 dB.
-//   EQUAL POWER  dry = cos(m·π/2), wet = sin(m·π/2). Correct when wet is UNCORRELATED with dry (echoes,
-//            reverb): uncorrelated signals add as powers, so cos² + sin² = 1 keeps the loudness constant,
-//            where linear would dip by 3 dB in the middle.
+//   LINEAR   dry = 1 − m, wet = m. Correct when wet ≈ dry in phase (a flanger, a phaser, a filter: their
+//            sound IS the interference): coherent signals add as amplitudes, so 0.5 + 0.5 keeps the level,
+//            where equal power would bump it by +3 dB.
+//   EQUAL POWER  dry = cos(m·π/2), wet = sin(m·π/2). Correct when wet is UNCORRELATED with dry (a chorus,
+//            echoes, reverb): uncorrelated signals add as powers, so cos² + sin² = 1 keeps the loudness
+//            constant, where linear would dip by 3 dB in the middle.
+//   (L5.1 first filed the chorus under linear. L5.4 measured it: a copy 10 ms late is uncorrelated, and the
+//   linear 50 % mix lost 5.5 dB. Which law is right is a measurement, not a guess.)
 struct MixGains {
     float dry, wet;
 };
