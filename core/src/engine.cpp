@@ -19,10 +19,14 @@ void Engine::prepare(double sampleRate, int /*maxBlockSize*/, float stealFadeMs)
     const float levelMs = smoothing_ ? synth::findParam(op(0, synth::OpField::Level))->smoothingMs : 0.0f;
     const float matrixMs = smoothing_ ? synth::findParam(synth::param_id::kAlgorithm)->smoothingMs : 0.0f;
     const float gainMs = smoothing_ ? synth::findParam(synth::param_id::kOutputDb)->smoothingMs : 0.0f;
+    const float cutoffMs = smoothing_ ? synth::findParam(synth::param_id::kCutoff)->smoothingMs : 0.0f;
+    const float qMs = smoothing_ ? synth::findParam(synth::param_id::kResonance)->smoothingMs : 0.0f;
     for (synth::Voice& v : voices_)
         v.prepare(sampleRate, stealFadeMs, levelMs);
     matrixK_ = matrixMs > 0.0f ? static_cast<float>(1.0 - std::exp(-1.0 / (matrixMs * 0.001 * sampleRate))) : 1.0f;
     gain_.prepare(sampleRate, gainMs);
+    cutoffOctaves_.prepare(sampleRate, cutoffMs);
+    q_.prepare(sampleRate, qMs);
     reset();
 }
 
@@ -32,6 +36,8 @@ void Engine::setPatch(const synth::Patch& patch) noexcept
     live_ = patch.algorithm;
     liveSettling_ = false;
     gain_.reset(patch.outputGain);
+    cutoffOctaves_.reset(std::log2(patch.filter.cutoffHz));
+    q_.reset(patch.filter.q);
 }
 
 void Engine::reset() noexcept
@@ -43,6 +49,8 @@ void Engine::reset() noexcept
     live_ = patch_.algorithm;
     liveSettling_ = false;
     gain_.reset(patch_.outputGain);
+    cutoffOctaves_.reset(std::log2(patch_.filter.cutoffHz));
+    q_.reset(patch_.filter.q);
 }
 
 void Engine::setPolyphony(int voices) noexcept
@@ -120,6 +128,7 @@ void Engine::paramChange(const Event& e) noexcept
                 v.refreshFrequencies(); // phase is continuous, so a pitch change never clicks
         break;
     case synth::ParamTarget::OpEnv:
+    case synth::ParamTarget::FilterEnv:
         for (synth::Voice& v : voices_)
             if (v.busy())
                 v.refreshEnvelopes();
@@ -131,6 +140,16 @@ void Engine::paramChange(const Event& e) noexcept
     case synth::ParamTarget::Output:
         gain_.setTarget(patch_.outputGain);
         break;
+    case synth::ParamTarget::FilterCutoff:
+        // Smoothed in octaves, not Hz: a glide from 100 Hz to 10 kHz then moves evenly *as heard*,
+        // instead of spending almost all of its time in the top octave.
+        cutoffOctaves_.setTarget(std::log2(patch_.filter.cutoffHz));
+        break;
+    case synth::ParamTarget::FilterQ:
+        q_.setTarget(patch_.filter.q);
+        break;
+    case synth::ParamTarget::Filter:
+        break; // voices read mode / amounts from the patch every sample
     }
 }
 
@@ -206,10 +225,11 @@ void Engine::render(float* outL, float* outR, int from, int to) noexcept
     for (int i = from; i < to; ++i) {
         if (liveSettling_)
             settleMatrix();
+        const synth::VoiceControl ctl{.alg = &live_, .cutoffOctaves = cutoffOctaves_.tick(), .q = q_.tick()};
         float sum = 0.0f;
         for (synth::Voice& v : voices_)
             if (v.busy())
-                sum += v.tick(live_);
+                sum += v.tick(ctl);
         const float y = softClip(gain_.tick() * sum);
         outL[i] = y;
         outR[i] = y; // mono voices for now; stereo spread comes with unison (L4.4)

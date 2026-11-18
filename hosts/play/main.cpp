@@ -6,7 +6,7 @@
 //   - Notes: mouse on the on-screen piano, the computer keyboard (Z..M / Q..U rows), and EVERY MIDI input
 //     device connected at startup.
 //   - Sound: every parameter in the param table, as sliders generated from it; preset buttons; MIDI CCs
-//     mapped through the table (CC 74 = op A level, CC 71 = op C level, CC 1 = op A feedback, CC 7 = output).
+//     mapped through the table (CC 74 = filter cutoff, CC 71 = resonance, CC 1 = op A feedback, CC 7 = output).
 //   - --frames N closes the window after N frames (automated smoke tests).
 //
 // Threads:
@@ -257,32 +257,36 @@ void drawMain(synth::Patch& patch, PlayHost& host, const standalone::DeviceInfo&
 {
     placePanel(0.0f, 0.0f, 0.28f, 0.62f);
     ImGui::Begin("CFS");
-    ImGui::TextDisabled("Claude's FirstStreetSynthesis - L2.4 dev surface");
+    ImGui::TextDisabled("Claude's FirstStreetSynthesis - dev surface (param table)");
     ImGui::Separator();
 
     ImGui::Text("Presets");
-    if (ImGui::Button("E-piano"))
-        loadPatch(patch, synth::presets::epiano(), host);
-    ImGui::SameLine();
-    if (ImGui::Button("FM bass"))
-        loadPatch(patch, synth::presets::fmBass(), host);
-    ImGui::SameLine();
-    if (ImGui::Button("Init"))
-        loadPatch(patch, synth::Patch{}, host);
-    ImGui::SameLine();
+    for (const synth::presets::NamedPreset& pr : synth::presets::kFactoryPresets) {
+        if (ImGui::Button(pr.name))
+            loadPatch(patch, pr.make(), host);
+        ImGui::SameLine();
+    }
     if (ImGui::Button("Panic"))
         host.post({Event::Type::AllNotesOff});
 
-    ImGui::Separator();
+    std::string_view group;
     for (const synth::ParamInfo& p : synth::kParams) {
         if (p.op >= 0)
             continue;
+        if (p.group != group) { // the table's groups become labelled sections (Global, Filter, ...)
+            group = p.group;
+            ImGui::SeparatorText(std::string(group).c_str());
+        }
         ImGui::Text("%-10.*s", static_cast<int>(p.name.size()), p.name.data());
         ImGui::SameLine(ImGui::GetFontSize() * 6.5f); // label column scales with font (= with DPI)
         ImGui::SetNextItemWidth(-1);
         paramWidget(p, patch, host);
         if (p.id == synth::param_id::kAlgorithm)
             ImGui::TextDisabled("  %s", synth::kAlgorithms[static_cast<std::size_t>(patch.algorithmNumber - 1)].name);
+        if (p.id == synth::param_id::kFilterMode) {
+            static constexpr const char* kModeNames[] = {"Off", "Low-pass", "Band-pass", "High-pass", "Notch"};
+            ImGui::TextDisabled("  %s", kModeNames[static_cast<std::size_t>(patch.filter.mode)]);
+        }
     }
 
     ImGui::Separator();

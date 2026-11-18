@@ -25,6 +25,9 @@ synth::Patch testPatch()
     p.ops[2] = {.ratio = util::Ratio{1.0}, .level = 1.0f, .env = {.attackMs = 1.0f, .decayMs = 500.0f, .sustain = 0.3f, .releaseMs = 300.0f}};
     p.ops[3] = {.level = 1.0f, .env = {.attackMs = 3.0f, .decayMs = 1000.0f, .sustain = 0.6f, .releaseMs = 400.0f}};
     p.algorithm.mod[0][0] = 0.7f; // some feedback too: history must also be block-size independent
+    // L1.10: a resonant filter with envelope, key tracking and velocity, so invariance covers it too.
+    p.filter = {.mode = synth::FilterMode::LowPass, .cutoffHz = 800.0f, .q = 4.0f, .envOctaves = 3.0f, .keyTrack = 0.5f,
+                .velOctaves = 1.0f, .env = {.attackMs = 3.0f, .decayMs = 200.0f, .sustain = 0.2f, .releaseMs = 150.0f}};
     p.outputGain = 0.3f;
     return p;
 }
@@ -177,4 +180,37 @@ TEST_CASE("softClip: transparent below 0.8, bounded by 1, smooth and odd", "[eng
     CHECK(softClip(-3.0f) == -softClip(3.0f));
     // Continuous slope at the knee: no corner (a corner would add harmonics abruptly).
     CHECK(std::abs((softClip(0.8001f) - softClip(0.8f)) / 0.0001f - 1.0f) < 0.01f);
+}
+
+TEST_CASE("Engine: the voice filter shapes the sound (LP darkens, envelope opens, key tracking follows)", "[engine][filter]")
+{
+    // RMS of one held note's first 0.5 s through the Engine.
+    auto render = [](const synth::Patch& p, std::uint8_t key) {
+        Engine eng;
+        eng.prepare(kFs, 512);
+        eng.setPatch(p);
+        std::vector<float> l(24000), r(24000);
+        const Event on[] = {Event::noteOn(0, key, 1.0f)};
+        eng.process(on, l.data(), r.data(), 24000);
+        double s = 0;
+        for (float v : l)
+            s += static_cast<double>(v) * v;
+        return 10.0 * std::log10(s / 24000.0 + 1e-30);
+    };
+    synth::Patch bright = testPatch();
+    bright.filter.mode = synth::FilterMode::Off;
+    synth::Patch dark = testPatch();
+    dark.filter.cutoffHz = 60.0f;
+    dark.filter.q = 0.7071f;
+    dark.filter.envOctaves = 0.0f;
+    dark.filter.keyTrack = 0.0f;
+    // Key 69 = 440 Hz fundamental: a 60 Hz 2-pole low-pass is ~35 dB down there.
+    CHECK(render(dark, 69) < render(bright, 69) - 25.0);
+    synth::Patch opened = dark;
+    opened.filter.envOctaves = 6.0f;      // envelope opens 60 Hz → 3.8 kHz at its peak
+    opened.filter.env.sustain = 1.0f;
+    CHECK(render(opened, 69) > render(dark, 69) + 15.0);
+    synth::Patch tracked = dark;
+    tracked.filter.keyTrack = 1.0f;       // two octaves above C4: cutoff 60 → 240 Hz
+    CHECK(render(tracked, 84) > render(dark, 84) + 10.0);
 }

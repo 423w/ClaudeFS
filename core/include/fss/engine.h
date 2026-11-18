@@ -70,6 +70,7 @@ private:
     bool liveSettling_ = false;     // live_ still gliding toward patch_.algorithm?
     float matrixK_ = 1.0f;          // one-pole coefficient for the matrix glide
     dsp::OnePoleSmoother gain_{};   // output gain, smoothed per sample
+    dsp::OnePoleSmoother cutoffOctaves_{}, q_{}; // filter base cutoff (log2 Hz) and resonance, smoothed (L1.10)
     bool smoothing_ = true;
     int polyphony_ = kMaxPolyphony;
     float bend_ = 0.0f;

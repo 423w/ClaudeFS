@@ -9,11 +9,23 @@ namespace fss::synth {
 float getParam(const Patch& patch, const ParamInfo& p) noexcept
 {
     if (p.op < 0) {
-        switch (p.target) {
-        case ParamTarget::Algorithm: return static_cast<float>(patch.algorithmNumber);
-        case ParamTarget::Output: return util::gainToDb(patch.outputGain);
-        default: return p.id == param_id::kTuningA4 ? static_cast<float>(patch.tuningA4.value)
-                                                    : static_cast<float>(patch.bendRange.value);
+        const FilterParams& f = patch.filter;
+        switch (p.id) {
+        case param_id::kAlgorithm: return static_cast<float>(patch.algorithmNumber);
+        case param_id::kOutputDb: return util::gainToDb(patch.outputGain);
+        case param_id::kTuningA4: return static_cast<float>(patch.tuningA4.value);
+        case param_id::kBendRange: return static_cast<float>(patch.bendRange.value);
+        case param_id::kFilterMode: return static_cast<float>(f.mode);
+        case param_id::kCutoff: return f.cutoffHz;
+        case param_id::kResonance: return f.q;
+        case param_id::kFilterEnvAmount: return f.envOctaves;
+        case param_id::kKeyTrack: return f.keyTrack;
+        case param_id::kFilterVel: return f.velOctaves;
+        case param_id::kFilterAttack: return f.env.attackMs;
+        case param_id::kFilterDecay: return f.env.decayMs;
+        case param_id::kFilterSustain: return f.env.sustain;
+        case param_id::kFilterRelease: return f.env.releaseMs;
+        default: return p.def;
         }
     }
     const auto i = static_cast<std::size_t>(p.op);
@@ -40,8 +52,9 @@ void setParam(Patch& patch, const ParamInfo& p, float plain) noexcept
 {
     const float v = clampToRange(p, plain);
     if (p.op < 0) {
-        switch (p.target) {
-        case ParamTarget::Algorithm: {
+        FilterParams& f = patch.filter;
+        switch (p.id) {
+        case param_id::kAlgorithm: {
             // Swap in the preset matrix but keep each operator's feedback (the diagonal is per-op state).
             patch.algorithmNumber = static_cast<std::uint8_t>(v);
             Algorithm next = kAlgorithms[static_cast<std::size_t>(patch.algorithmNumber - 1)];
@@ -50,13 +63,20 @@ void setParam(Patch& patch, const ParamInfo& p, float plain) noexcept
             patch.algorithm = next;
             return;
         }
-        case ParamTarget::Output: patch.outputGain = util::dbToGain(v); return;
-        default:
-            if (p.id == param_id::kTuningA4)
-                patch.tuningA4 = util::Hz{v};
-            else
-                patch.bendRange = util::Semitones{v};
-            return;
+        case param_id::kOutputDb: patch.outputGain = util::dbToGain(v); return;
+        case param_id::kTuningA4: patch.tuningA4 = util::Hz{v}; return;
+        case param_id::kBendRange: patch.bendRange = util::Semitones{v}; return;
+        case param_id::kFilterMode: f.mode = static_cast<FilterMode>(static_cast<int>(v)); return;
+        case param_id::kCutoff: f.cutoffHz = v; return;
+        case param_id::kResonance: f.q = v; return;
+        case param_id::kFilterEnvAmount: f.envOctaves = v; return;
+        case param_id::kKeyTrack: f.keyTrack = v; return;
+        case param_id::kFilterVel: f.velOctaves = v; return;
+        case param_id::kFilterAttack: f.env.attackMs = v; return;
+        case param_id::kFilterDecay: f.env.decayMs = v; return;
+        case param_id::kFilterSustain: f.env.sustain = v; return;
+        case param_id::kFilterRelease: f.env.releaseMs = v; return;
+        default: return;
         }
     }
     const auto i = static_cast<std::size_t>(p.op);

@@ -15,6 +15,7 @@ void renderL1_6(const std::filesystem::path& outDir); // l1_6.cpp: patch, veloci
 void renderL1_7(const std::filesystem::path& outDir); // l1_7.cpp: Engine, polyphony, stealing, the M2 piece
 void renderL1_8(const std::filesystem::path& outDir); // l1_8.cpp: saw/square/triangle, aliasing, PolyBLEP
 void renderL1_9(const std::filesystem::path& outDir); // l1_9.cpp: one-pole and biquad filters, responses, sweeps
+void renderL1_10(const std::filesystem::path& outDir); // l1_10.cpp: TPT SVF vs biquad, per-voice filter
 void renderL2_4(const std::filesystem::path& outDir); // l2_4.cpp: parameter smoothing A/B (zipper noise)
 
 } // namespace fss::render
