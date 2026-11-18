@@ -62,7 +62,7 @@ Recommendation: ADSR now, and generalize to multi-segment in Branch 4 if you wan
 - **Recommendation:** 4 operators, stored internally as a **free modulation matrix**, with
   **algorithm presets** that just fill in the matrix. You get easy UX and full flexibility from one data structure.
 
-### D8. Polyphony & voice stealing: `DECIDED` → 16 voices + 4 fade slots; steal released-oldest, then held-oldest; 5 ms fade  *(L1.7, see Log; refine in L2.5)*
+### D8. Polyphony & voice stealing: `DECIDED` → 16 voices + 4 fade slots; steal released, then pedal-held, then held (oldest first); 5 ms fade  *(L1.7; refined in L2.5, see Log)*
 Voice count (8? 16? 32?), steal policy (oldest, quietest, same-key retrigger), and how fast
 a stolen voice fades out (avoids clicks).
 
@@ -343,6 +343,22 @@ controller. The shell was built by a subagent in parallel, then extended.
 **Revisit if:** the plugin GUI (D14, L3.5) wants the same toolkit, in which case ImGui inside the CLAP window is a natural path.
 **The owner might choose differently if:** they'd rather stay "headless" with a cheap MIDI controller
 (fewer moving parts), or want to start the real GUI technology now.
+
+### 2026-11-17: D8 refined (CFS, L2.5): pedal-aware stealing; mono uses the fade slots
+**Decision.** Steal ranking is now released → held only by the sustain pedal → held by a key, oldest first
+within a rank. Mono (retrigger) starts a fresh voice and fades the old one in its slot (5 ms), exactly like a
+steal; legato moves the same voice. Same-key re-strike (fade + new voice) also applies to pedal-sustained notes.
+**Options considered.** Treat pedal-sustained notes as held (they are still "gated"); treat them as released
+(their envelopes are not in release yet); a rank between the two (chosen). For mono: restart envelopes in the
+same voice (phase reset → click) vs a new voice + fade (chosen).
+**Why.** A pedal-sustained note is one the player already let go of; losing it is less noticeable than losing a
+key they're holding, but it hasn't started fading on its own, so a releasing tail goes first. The fade-slot
+mechanism already guaranteed click-free, latency-free steals, so mono retrigger reuses it unchanged.
+Tested (`test_play.cpp`): with 3 voices the pedal-only note is stolen, not the oldest held one.
+**Revisit if:** pedal-heavy piano playing runs out of 16 voices audibly (raise polyphony, or steal the
+*quietest* pedal-sustained voice instead of the oldest, which needs a per-voice level estimate).
+**The owner might choose differently if:** they treat pedal-held notes exactly like released ones (simpler:
+one flag), or prefer quietest-first stealing for pianos.
 
 <!-- Append entries like:
 ### 2026-11-20: D5 decided: double phase in [0,1)

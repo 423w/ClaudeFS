@@ -31,6 +31,10 @@ void Engine::prepare(double sampleRate, int /*maxBlockSize*/, float stealFadeMs)
     lfo1Reference_.prepare(sampleRate);
     // A 7-bit mod wheel moves in steps of 1/127; 10 ms smoothing turns them into a glide (like L2.4's knobs).
     modWheel_.prepare(sampleRate, smoothing_ ? 10.0f : 0.0f);
+    // Pitch bend: 3 ms is short enough to feel instant under the thumb, long enough to round a 7-bit
+    // staircase (a cheap controller sends 128 steps; at ±12 st each step is a 0.19 st jump).
+    bendSmoothed_.prepare(sampleRate, smoothing_ ? 3.0f : 0.0f);
+    sampleRate_ = sampleRate;
     reset();
 }
 
@@ -65,6 +69,11 @@ void Engine::reset() noexcept
     cutoffOctaves_.reset(std::log2(patch_.filter.cutoffHz));
     q_.reset(patch_.filter.q);
     modWheel_.reset(0.0f);
+    bendSmoothed_.reset(0.0f);
+    held_.clear();
+    sustainPedal_ = false;
+    monoVoice_ = nullptr;
+    hasLastPitch_ = false;
     restartLfos();
 }
 
@@ -108,23 +117,50 @@ void Engine::handle(const Event& e) noexcept
         noteOff(e);
         break;
     case Event::Type::PitchBend:
+        // Since L2.5 the bend is a per-sample pitch OFFSET (smoothed here, applied in every voice with glide
+        // and vibrato) instead of being baked into each voice's base frequency on every bend message.
         bend_ = std::clamp(e.value, -1.0f, 1.0f);
-        for (synth::Voice& v : voices_)
-            if (v.busy())
-                v.setBend(bend_);
+        bendSmoothed_.setTarget(bend_);
         break;
     case Event::Type::AllNotesOff:
-        for (synth::Voice& v : voices_)
-            v.release();
+        allNotesOff();
         break;
     case Event::Type::ParamChange:
         paramChange(e);
         break;
     case Event::Type::Controller:
-        if (e.key == 1) // CC 1: mod wheel → vibrato depth (patch.routes.wheelVibratoSemitones)
-            modWheel_.setTarget(std::clamp(e.value, 0.0f, 1.0f));
+        controller(e);
         break;
     }
+}
+
+void Engine::controller(const Event& e) noexcept
+{
+    if (e.key == 1) { // CC 1: mod wheel → vibrato depth (patch.routes.wheelVibratoSemitones)
+        modWheel_.setTarget(std::clamp(e.value, 0.0f, 1.0f));
+    } else if (e.key == 64) { // CC 64: sustain pedal, down at ≥ 64/127 (the MIDI convention)
+        const bool down = e.value >= 0.5f;
+        if (down == sustainPedal_)
+            return;
+        sustainPedal_ = down;
+        if (!down) // pedal up: every note the pedal was holding is released now
+            for (synth::Voice& v : voices_)
+                if (v.busy() && v.sustained())
+                    v.release();
+    }
+}
+
+void Engine::allNotesOff() noexcept
+{
+    // Panic: release everything, pedal-held notes included, and forget which keys were down.
+    for (synth::Voice& v : voices_)
+        v.release();
+    held_.clear();
+}
+
+int Engine::glideSamples() const noexcept
+{
+    return static_cast<int>(patch_.voice.glideMs * 0.001 * sampleRate_);
 }
 
 void Engine::paramChange(const Event& e) noexcept
@@ -170,6 +206,14 @@ void Engine::paramChange(const Event& e) noexcept
     case synth::ParamTarget::Filter:
     case synth::ParamTarget::Lfo:
         break; // voices and render() read these from the patch every sample (or at the next note)
+    case synth::ParamTarget::VoiceMode:
+        // Switching poly ↔ mono mid-performance: release what's sounding and start clean, rather than
+        // guess how 5 held poly voices should map onto one mono voice.
+        allNotesOff();
+        monoVoice_ = nullptr;
+        break;
+    case synth::ParamTarget::Play:
+        break; // glide time/mode and note priority are read at the next note event
     case synth::ParamTarget::LfoRate:
         lfo2_.setRate(patch_.lfo2.rateHz);
         lfo1Reference_.setFrequency(patch_.lfo1.rateHz);
@@ -182,10 +226,73 @@ void Engine::paramChange(const Event& e) noexcept
 
 void Engine::noteOn(const Event& e) noexcept
 {
+    const float velocity = std::clamp(e.value, 0.0f, 1.0f);
+    held_.press(e.key, velocity);
+    if (patch_.voice.mode != synth::VoiceMode::Poly) {
+        monoUpdate(true, e.key, e.noteId);
+        return;
+    }
+    // Poly: every key gets its own voice. Glide (if on) starts from the previous note's pitch; in
+    // "legato only" glide mode only when another key is still held (a connected phrase).
+    const bool otherKeyHeld = held_.size() > 1;
+    synth::Voice* v = startVoice(e.key, velocity, e.noteId);
+    const int glide = glideSamples();
+    if (glide > 0 && hasLastPitch_ && (!patch_.voice.glideLegatoOnly || otherKeyHeld))
+        v->glideFrom(lastPitch_ - static_cast<float>(e.key), glide);
+    lastPitch_ = static_cast<float>(e.key);
+    hasLastPitch_ = true;
+}
+
+void Engine::monoUpdate(bool pressed, std::uint8_t pressedKey, std::int32_t noteId) noexcept
+{
+    // Mono / legato (L2.5). Called whenever the set of held keys changed. One voice plays the note the
+    // priority rule picks from the held keys; this function makes the sounding note agree with that pick.
+    synth::Voice* v = (monoVoice_ && monoVoice_->busy() && !monoVoice_->fading()) ? monoVoice_ : nullptr;
+    if (held_.empty()) { // last key up: release, unless the pedal holds the note
+        if (v) {
+            if (sustainPedal_)
+                v->sustain();
+            else
+                v->release();
+        }
+        return;
+    }
+    const synth::HeldNotes::Note target = held_.pick(patch_.voice.priority);
+    const bool gateOn = v && !v->released(); // a note is sounding (held, or held by the pedal)
+    const bool mono = patch_.voice.mode == synth::VoiceMode::Mono;
+    // Mono (retrigger) restarts the note for every new key press that becomes the target, even the same key.
+    const bool retriggerPress = mono && pressed && target.key == pressedKey;
+    if (gateOn && v->key() == target.key && !retriggerPress) {
+        v->hold(); // e.g. a key pressed that loses on priority: nothing to change
+        return;
+    }
+    const int glideLen = glideSamples();
+    const bool glide = glideLen > 0 && hasLastPitch_ && (!patch_.voice.glideLegatoOnly || gateOn);
+    if (gateOn && !mono) { // legato: same voice, envelopes untouched, pitch slides or jumps
+        v->legatoTo(target.key, glide ? glideLen : 0);
+        v->hold();
+        lastPitch_ = static_cast<float>(target.key);
+        return;
+    }
+    // Retrigger: a fresh voice (envelopes from the start); the old one fades out in its slot (no click).
+    const float from = v ? v->pitch() : lastPitch_;
+    for (synth::Voice& other : voices_)
+        if (other.busy() && !other.fading())
+            other.kill(); // mono means one voice: also stop a previous note's release tail
+    synth::Voice* s = startVoice(target.key, target.velocity, noteId);
+    if (glide)
+        s->glideFrom(from - static_cast<float>(target.key), glideLen);
+    monoVoice_ = s;
+    lastPitch_ = static_cast<float>(target.key);
+    hasLastPitch_ = true;
+}
+
+synth::Voice* Engine::startVoice(std::uint8_t key, float velocity, std::int32_t noteId) noexcept
+{
     // 1. Same key already sounding (held or releasing): fade it out and start a fresh voice, like a piano
     //    hammer re-striking. Restarting it in place would reset its phases mid-waveform: a click.
     for (synth::Voice& v : voices_)
-        if (v.busy() && !v.fading() && v.key() == e.key)
+        if (v.busy() && !v.fading() && v.key() == key)
             v.kill();
 
     // 2. Over the polyphony limit (counting voices that aren't already fading)? Steal one.
@@ -210,15 +317,27 @@ void Engine::noteOn(const Event& e) noexcept
     }
     if (patch_.lfo2.keySync) // LFO 2 "retrigger": the global wobble restarts with each new note
         lfo2_.restart(0, static_cast<std::uint32_t>(noteCounter_ + 1));
-    const synth::NoteContext ctx{.key = e.key, .velocity = std::clamp(e.value, 0.0f, 1.0f), .bend = bend_};
-    slot->start(ctx, patch_, ++noteCounter_, e.noteId, lfo1Reference_.phase());
+    // bend = 0: the bend reaches the voice every sample as a pitch offset (VoiceControl), not at note start.
+    const synth::NoteContext ctx{.key = key, .velocity = velocity, .bend = 0.0f};
+    slot->start(ctx, patch_, ++noteCounter_, noteId, lfo1Reference_.phase());
+    return slot;
 }
 
 void Engine::noteOff(const Event& e) noexcept
 {
+    const bool wasHeld = held_.release(e.key);
+    if (patch_.voice.mode != synth::VoiceMode::Poly) {
+        if (wasHeld)
+            monoUpdate(false, e.key, e.noteId);
+        return;
+    }
     for (synth::Voice& v : voices_)
-        if (v.busy() && !v.released() && !v.fading() && v.key() == e.key && (e.noteId < 0 || v.noteId() == e.noteId))
-            v.release();
+        if (v.busy() && !v.released() && !v.fading() && v.key() == e.key && (e.noteId < 0 || v.noteId() == e.noteId)) {
+            if (sustainPedal_)
+                v.sustain(); // the pedal holds it; released at pedal-up
+            else
+                v.release();
+        }
 }
 
 synth::Voice* Engine::findFreeVoice() noexcept
@@ -231,14 +350,15 @@ synth::Voice* Engine::findFreeVoice() noexcept
 
 synth::Voice* Engine::chooseVictim() noexcept
 {
-    // Steal policy (D8): prefer a RELEASED voice (the player already let go; it's only a tail), oldest
-    // first; if every voice is held, take the OLDEST held note (the one the ear has had longest to accept).
+    // Steal policy (D8, refined in L2.5): prefer a RELEASED voice (the player let go; it's only a tail), then
+    // one held only by the SUSTAIN PEDAL (also let go, just still ringing), and only then a key still held
+    // down. Within a rank, the OLDEST (the one the ear has had longest to accept).
+    auto rank = [](const synth::Voice& v) { return v.released() ? 0 : v.sustained() ? 1 : 2; };
     synth::Voice* best = nullptr;
     for (synth::Voice& v : voices_) {
         if (!v.busy() || v.fading())
             continue;
-        if (!best || (v.released() && !best->released()) ||
-            (v.released() == best->released() && v.age() < best->age()))
+        if (!best || rank(v) < rank(*best) || (rank(v) == rank(*best) && v.age() < best->age()))
             best = &v;
     }
     return best;
@@ -273,7 +393,8 @@ void Engine::render(float* outL, float* outR, int from, int to) noexcept
         const synth::VoiceControl ctl{.alg = alg,
                                       .cutoffOctaves = cutoffOctaves_.tick() + lfo2 * routes.lfo2CutoffOctaves,
                                       .q = q_.tick(),
-                                      .modWheel = modWheel_.tick()};
+                                      .modWheel = modWheel_.tick(),
+                                      .bendSemitones = bendSmoothed_.tick() * static_cast<float>(patch_.bendRange.value)};
         float sum = 0.0f;
         for (synth::Voice& v : voices_)
             if (v.busy())

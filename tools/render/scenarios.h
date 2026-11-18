@@ -18,5 +18,6 @@ void renderL1_9(const std::filesystem::path& outDir); // l1_9.cpp: one-pole and 
 void renderL1_10(const std::filesystem::path& outDir); // l1_10.cpp: TPT SVF vs biquad, per-voice filter
 void renderL1_11(const std::filesystem::path& outDir); // l1_11.cpp: LFO shapes, vibrato, wobble, pad, key sync
 void renderL2_4(const std::filesystem::path& outDir); // l2_4.cpp: parameter smoothing A/B (zipper noise)
+void renderL2_5(const std::filesystem::path& outDir); // l2_5.cpp: legato/mono/poly, glide, sustain pedal, bend
 
 } // namespace fss::render

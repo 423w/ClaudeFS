@@ -293,6 +293,14 @@ void drawMain(synth::Patch& patch, PlayHost& host, const standalone::DeviceInfo&
             const auto shape = p.id == synth::param_id::kLfo1Shape ? patch.lfo1.shape : patch.lfo2.shape;
             ImGui::TextDisabled("  %s", kShapeNames[static_cast<std::size_t>(shape)]);
         }
+        if (p.id == synth::param_id::kVoiceMode) {
+            static constexpr const char* kModes[] = {"Poly", "Mono (retrigger)", "Legato"};
+            ImGui::TextDisabled("  %s", kModes[static_cast<std::size_t>(patch.voice.mode)]);
+        }
+        if (p.id == synth::param_id::kPriority) {
+            static constexpr const char* kPrio[] = {"Last note", "Lowest note", "Highest note"};
+            ImGui::TextDisabled("  %s", kPrio[static_cast<std::size_t>(patch.voice.priority)]);
+        }
     }
 
     // Performance controllers: not patch parameters (not saved with a preset), so they're Controller events,
@@ -304,6 +312,19 @@ void drawMain(synth::Patch& patch, PlayHost& host, const standalone::DeviceInfo&
     ImGui::SetNextItemWidth(-1);
     if (ImGui::SliderFloat("##wheel", &wheel, 0.0f, 1.0f, "%.2f"))
         host.post(Event::controller(0, 1, wheel));
+    static float bend = 0.0f;
+    ImGui::Text("Pitch bend");
+    ImGui::SameLine(ImGui::GetFontSize() * 6.5f);
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::SliderFloat("##bend", &bend, -1.0f, 1.0f, "%.2f"))
+        host.post(Event::pitchBend(0, bend));
+    if (ImGui::IsItemDeactivated()) { // let go of the slider: spring back to centre, like a bend wheel
+        bend = 0.0f;
+        host.post(Event::pitchBend(0, 0.0f));
+    }
+    static bool pedal = false;
+    if (ImGui::Checkbox("Sustain pedal (CC 64)", &pedal))
+        host.post(Event::controller(0, 64, pedal ? 1.0f : 0.0f));
 
     ImGui::Separator();
     const float peakDb = util::gainToDb(host.peak());

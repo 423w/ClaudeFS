@@ -191,7 +191,7 @@ Modes (tell Claude which one you want):
 - [x] L2.2 The real-time rules
 - [x] L2.3 MIDI & lock-free queue
 - [x] L2.4 Parameters & smoothing ★M3
-- [ ] L2.5 Playing it like an instrument
+- [x] L2.5 Playing it like an instrument
 - [ ] L2.6 CPU budget & denormals ★M4
 
 ### Branch 3: Into the DAW

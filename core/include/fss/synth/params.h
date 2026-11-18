@@ -47,6 +47,8 @@ enum class ParamTarget : std::uint8_t {
     FilterEnv,    // filter envelope times/sustain: envelopes updated (like OpEnv)
     LfoRate,      // an LFO's rate: the Engine re-tunes its LFOs and every voice's LFO 1 (L1.11)
     Lfo,          // shapes, depths, delay/fade, sync: read every sample or at the next note, nothing to do
+    VoiceMode,    // poly/mono/legato: the Engine releases what's sounding and starts clean (L2.5)
+    Play,         // glide, glide mode, note priority: read at the next note event, nothing to do
 };
 
 enum class OpField : std::uint8_t { // APPEND ONLY: values are part of the stable parameter ids
@@ -70,7 +72,7 @@ struct ParamInfo {
 
 namespace param_id {
 // Globals are numbered in groups of ten so related ids stay together: 1-9 global, 10-19 filter (L1.10),
-// 30-39 LFO 1 + vibrato, 40-49 LFO 2 (L1.11).
+// 30-39 LFO 1 + vibrato, 40-49 LFO 2 (L1.11), 50-59 voice / playing (L2.5).
 inline constexpr std::uint32_t kAlgorithm = 1, kOutputDb = 2, kTuningA4 = 3, kBendRange = 4;
 inline constexpr std::uint32_t kFilterMode = 10, kCutoff = 11, kResonance = 12, kFilterEnvAmount = 13,
                                kKeyTrack = 14, kFilterVel = 15, kFilterAttack = 16, kFilterDecay = 17,
@@ -78,6 +80,7 @@ inline constexpr std::uint32_t kFilterMode = 10, kCutoff = 11, kResonance = 12, 
 inline constexpr std::uint32_t kLfo1Rate = 30, kLfo1Shape = 31, kLfo1Delay = 32, kLfo1Fade = 33, kLfo1KeySync = 34,
                                kVibrato = 35, kWheelVibrato = 36;
 inline constexpr std::uint32_t kLfo2Rate = 40, kLfo2Shape = 41, kLfo2Retrigger = 42, kLfo2Cutoff = 43, kLfo2Index = 44;
+inline constexpr std::uint32_t kVoiceMode = 50, kGlide = 51, kGlideLegato = 52, kPriority = 53;
 constexpr std::uint32_t op(int opIndex, OpField f) { return 1000u + 100u * static_cast<std::uint32_t>(opIndex) + static_cast<std::uint32_t>(f); }
 } // namespace param_id
 
@@ -149,6 +152,12 @@ inline constexpr ParamInfo kGlobalParams[] = {
     {param_id::kLfo2Retrigger, "LFO2 retrig", "on/off", 0.0f, 1.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Lfo, -1, {}, "LFO 2 (filter, index)"},
     {param_id::kLfo2Cutoff, "LFO2 > cutoff", "oct", 0.0f, 6.0f, 0.0f, Skew::Power2, 0.0f, 0, ParamTarget::Lfo, -1, {}, "LFO 2 (filter, index)"},
     {param_id::kLfo2Index, "LFO2 > index", "", 0.0f, 1.0f, 0.0f, Skew::Linear, 0.0f, 0, ParamTarget::Lfo, -1, {}, "LFO 2 (filter, index)"},
+    // ---- voice / playing (L2.5) ----
+    // Mode: 0 poly, 1 mono (retrigger), 2 legato. Priority: 0 last, 1 low, 2 high.
+    {param_id::kVoiceMode, "Voice mode", "", 0.0f, 2.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::VoiceMode, -1, {}, "Voice"},
+    {param_id::kGlide, "Glide", "ms", 0.0f, 2000.0f, 0.0f, Skew::Power2, 0.0f, 5, ParamTarget::Play, -1, {}, "Voice"},
+    {param_id::kGlideLegato, "Glide legato", "on/off", 0.0f, 1.0f, 1.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Play, -1, {}, "Voice"},
+    {param_id::kPriority, "Priority", "", 0.0f, 2.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Play, -1, {}, "Voice"},
 };
 inline constexpr std::size_t kNumGlobalParams = std::size(kGlobalParams);
 

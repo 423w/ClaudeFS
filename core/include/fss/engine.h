@@ -18,6 +18,7 @@
 #include <fss/dsp/phasor.h>
 #include <fss/dsp/smoother.h>
 #include <fss/event.h>
+#include <fss/synth/held_notes.h>
 #include <fss/synth/patch.h>
 #include <fss/synth/voice.h>
 
@@ -55,12 +56,21 @@ public:
     // Statistics for tests and renders.
     [[nodiscard]] int busyVoices() const noexcept;
     [[nodiscard]] std::uint64_t steals() const noexcept { return steals_; }
+    /// Read-only view of the voice pool, for scenario tests (L2.5): "after these events, these voices
+    /// should be in these states".
+    [[nodiscard]] const std::array<synth::Voice, kNumVoices>& voices() const noexcept { return voices_; }
+    [[nodiscard]] bool sustainPedal() const noexcept { return sustainPedal_; }
 
 private:
     void handle(const Event& e) noexcept;
     void paramChange(const Event& e) noexcept;
     void noteOn(const Event& e) noexcept;
     void noteOff(const Event& e) noexcept;
+    void controller(const Event& e) noexcept;
+    void monoUpdate(bool pressed, std::uint8_t pressedKey, std::int32_t noteId) noexcept;
+    synth::Voice* startVoice(std::uint8_t key, float velocity, std::int32_t noteId) noexcept;
+    [[nodiscard]] int glideSamples() const noexcept;
+    void allNotesOff() noexcept;
     void render(float* outL, float* outR, int from, int to) noexcept;
     void settleMatrix() noexcept;
     void restartLfos() noexcept;
@@ -80,7 +90,15 @@ private:
     synth::Algorithm indexScaled_{}; // live_ with every modulation amount scaled by LFO 2 (when routed)
     bool smoothing_ = true;
     int polyphony_ = kMaxPolyphony;
+    double sampleRate_ = 48000.0;
     float bend_ = 0.0f;
+    dsp::OnePoleSmoother bendSmoothed_{}; // −1..1, smoothed (L2.5)
+    // Playing state (L2.5)
+    synth::HeldNotes held_;               // keys physically down, in press order
+    bool sustainPedal_ = false;           // CC 64
+    synth::Voice* monoVoice_ = nullptr;   // the voice mono/legato modes are playing
+    float lastPitch_ = 0.0f;              // where the last note started or ended up: glides start here
+    bool hasLastPitch_ = false;
     std::uint64_t noteCounter_ = 0, steals_ = 0;
 };
 

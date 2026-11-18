@@ -20,6 +20,7 @@
 #include <fss/dsp/adsr.h>
 #include <fss/dsp/lfo.h>
 #include <fss/synth/algorithm.h>
+#include <fss/synth/held_notes.h>
 #include <fss/util/units.h>
 
 #include <array>
@@ -84,6 +85,19 @@ struct ModRoutes {
     float lfo2IndexAmount = 0.0f;       // 0..1 = ±0..100 % of the modulation index
 };
 
+/// How the keyboard maps onto voices (L2.5).
+///   Poly    every key its own voice (up to the polyphony limit)
+///   Mono    one voice; every new key restarts the envelopes ("retrigger"), with a 5 ms steal fade
+///   Legato  one voice; while a key is held, a new key only changes the pitch (envelopes keep going)
+enum class VoiceMode : std::uint8_t { Poly, Mono, Legato };
+
+struct VoiceParams {
+    VoiceMode mode = VoiceMode::Poly;
+    float glideMs = 0.0f;          // portamento time, constant per glide (0 = off)
+    bool glideLegatoOnly = true;   // glide only into notes played while another is held (connected phrases)
+    NotePriority priority = NotePriority::Last; // mono/legato: which held key sounds
+};
+
 struct Patch {
     Algorithm algorithm = kAlgorithms[0]; // a copy: feedback (diagonal) is part of the patch
     std::uint8_t algorithmNumber = 1;      // which preset `algorithm` came from (1..8), for the param table
@@ -92,6 +106,7 @@ struct Patch {
     LfoParams lfo1{};
     LfoParams lfo2{.rateHz = 2.0f, .keySync = false};
     ModRoutes routes{};
+    VoiceParams voice{};
     util::Hz tuningA4{440.0};
     util::Semitones bendRange{2.0};       // full pitch-bend wheel deflection
     float outputGain = 1.0f;

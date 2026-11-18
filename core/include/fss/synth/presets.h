@@ -94,6 +94,20 @@ inline Patch evolvingPad()
     return p;
 }
 
+/// Legato bass (L2.5): the Reso pluck's sound as a mono legato synth with an 80 ms glide between
+/// overlapping notes (lowest-note priority would suit a pedal-tone bass line; this one uses last-note).
+inline Patch legatoBass()
+{
+    Patch p = resoPluck();
+    p.ops[2].env.sustain = 0.9f;
+    p.ops[3].env = {.attackMs = 2.0f, .decayMs = 800.0f, .sustain = 0.8f, .releaseMs = 120.0f};
+    p.filter.env = {.attackMs = 1.0f, .decayMs = 400.0f, .sustain = 0.25f, .releaseMs = 200.0f};
+    p.filter.envOctaves = 4.0f;
+    p.voice = {.mode = VoiceMode::Legato, .glideMs = 80.0f, .glideLegatoOnly = true};
+    p.outputGain = 0.3f;
+    return p;
+}
+
 /// The factory list hosts show as buttons (fss_play). A real preset system with files is L3.4.
 struct NamedPreset {
     const char* name;
@@ -105,6 +119,7 @@ inline constexpr NamedPreset kFactoryPresets[] = {
     {"Reso pluck", resoPluck},
     {"Wobble bass", wobbleBass},
     {"FM pad", evolvingPad},
+    {"Legato bass", legatoBass},
     {"Init", [] { return Patch{}; }},
 };
 

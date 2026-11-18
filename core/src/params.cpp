@@ -37,6 +37,10 @@ float getParam(const Patch& patch, const ParamInfo& p) noexcept
         case param_id::kLfo2Retrigger: return patch.lfo2.keySync ? 1.0f : 0.0f;
         case param_id::kLfo2Cutoff: return patch.routes.lfo2CutoffOctaves;
         case param_id::kLfo2Index: return patch.routes.lfo2IndexAmount;
+        case param_id::kVoiceMode: return static_cast<float>(patch.voice.mode);
+        case param_id::kGlide: return patch.voice.glideMs;
+        case param_id::kGlideLegato: return patch.voice.glideLegatoOnly ? 1.0f : 0.0f;
+        case param_id::kPriority: return static_cast<float>(patch.voice.priority);
         default: return p.def;
         }
     }
@@ -100,6 +104,10 @@ void setParam(Patch& patch, const ParamInfo& p, float plain) noexcept
         case param_id::kLfo2Retrigger: patch.lfo2.keySync = v >= 0.5f; return;
         case param_id::kLfo2Cutoff: patch.routes.lfo2CutoffOctaves = v; return;
         case param_id::kLfo2Index: patch.routes.lfo2IndexAmount = v; return;
+        case param_id::kVoiceMode: patch.voice.mode = static_cast<VoiceMode>(static_cast<int>(v)); return;
+        case param_id::kGlide: patch.voice.glideMs = v; return;
+        case param_id::kGlideLegato: patch.voice.glideLegatoOnly = v >= 0.5f; return;
+        case param_id::kPriority: patch.voice.priority = static_cast<NotePriority>(static_cast<int>(v)); return;
         default: return;
         }
     }

@@ -143,6 +143,14 @@ public:
     [[nodiscard]] std::uint8_t key() const noexcept { return key_; }
     [[nodiscard]] float velocity() const noexcept { return velocity_; }
 
+    /// Legato (L2.5): a new key for the sounding note. Frequencies follow (phases continue); levels,
+    /// velocity and envelope scaling keep the values the note started with (it's still the same "strike").
+    void setKey(std::uint8_t key) noexcept
+    {
+        key_ = key;
+        refreshFrequencies();
+    }
+
     void prepare(double sampleRate, float levelSmoothingMs = 5.0f) noexcept
     {
         for (Operator& op : ops_)
