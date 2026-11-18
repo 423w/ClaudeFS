@@ -30,7 +30,7 @@ add PolyBLEP and wavetable waveforms to the operators, so the hybrid grows natur
 **Pivot clause:** if FM doesn't speak to you by the end of L1.5, swap the operator stack for 2–3
 VA oscillators. Every later lesson still applies.
 
-### D2. Target DAW(s) & plugin format: `DECIDED` → FL Studio, hand-written CLAP first; VST3 near the end  *(see Log)*
+### D2. Target DAW(s) & plugin format: `DECIDED` (final, L3.1) → FL Studio, hand-written CLAP first; VST3 near the end  *(see Log)*
 Which DAW you use most decides the path:
 - **Bitwig, REAPER, FL Studio (2024+), Studio One 7+** load **CLAP** natively, so the hand-written CLAP plugin works directly.
 - **Ableton Live** (no CLAP as of late 2025/2026) needs **VST3** (or AU on Mac), via `clap-wrapper` or JUCE.
@@ -83,7 +83,7 @@ what CLAP does anyway) vs both. Recommendation: event queue as the canonical pat
 ### D12. Dev control surface before the plugin GUI: `DECIDED` → Dear ImGui (generated from the param table) + MIDI CCs  *(L2.4, see Log)*
 MIDI CC knobs only / Dear ImGui window / terminal UI. Dear ImGui is quick and lets you build scopes early.
 
-### D13. Plugin framework: `OPEN`  *(L3.1)*
+### D13. Plugin framework: `DECIDED` → hand-written CLAP on the bare C headers; clap-wrapper for VST3 later  *(L3.1, see Log)*
 | Option | You learn | You give up |
 |---|---|---|
 | **Hand-written CLAP** (+ `clap-wrapper` for VST3) | The real host/plugin contract, the C ABI, threading | GUI and wrappers are more work |
@@ -359,6 +359,33 @@ Tested (`test_play.cpp`): with 3 voices the pedal-only note is stolen, not the o
 *quietest* pedal-sustained voice instead of the oldest, which needs a per-voice level estimate).
 **The owner might choose differently if:** they treat pedal-held notes exactly like released ones (simpler:
 one flag), or prefer quietest-first stealing for pianos.
+
+### 2026-11-18: D2 final (CFS, L3.1): FL Studio + CLAP, VST3 in Phase G
+**Decision.** Unchanged from the owner's call: the plugin target is FL Studio 2024.1+ loading `CFS.clap`
+natively. VST3 (L3.3) stays deferred to Phase G.
+**Why final now.** L3.1's reading confirms nothing in the CLAP contract that CFS needs (notes with ids,
+sample-accurate parameter events, state, an embedded Win32 GUI) is missing for FL Studio, and CLAP's
+model is the one CFS's Engine already speaks (D11).
+**Revisit if:** FL Studio's CLAP support turns out to lack something we rely on (the owner's FL tests in
+L3.2/L3.5 will tell), or a second DAW without CLAP enters the picture.
+**The owner might choose differently if:** n/a. This is the owner's decision; CFS follows it.
+
+### 2026-11-18: D13 decided (CFS, L3.1): hand-written CLAP, bare C headers only
+**Decision.** `hosts/clap` implements the CLAP C API directly: our own static trampolines, factory and
+extensions, against the official headers (free-audio/clap 1.2.10, MIT, header-only). No clap-helpers, no
+JUCE. When VST3 is needed (L3.3), wrap this same plugin with clap-wrapper, so the hand-written layer stays the
+single source of truth.
+**Options considered.** Bare CLAP headers (chosen); CLAP + `clap-helpers` (C++ base class that hides the
+trampolines and checks host misbehaviour); JUCE 8 (VST3/AU/standalone + GUI toolkit); raw VST3 SDK;
+iPlug2/DPF.
+**Why.** The trampolines, the thread tags and the parameter-sync problem *are* Branch 3's lesson, and the core
+already speaks CLAP's event model, so the adapter is thin. Header-only MIT code adds no licence constraint
+(D18 stays open). A plugin built on bare headers has one dependency the owner can read in an afternoon.
+**Revisit if:** the GUI work (L3.5) shows we're re-inventing a toolkit (then a GUI library, not a plugin
+framework, is the fix); or VST3/AU become urgent and clap-wrapper can't express something we need.
+**The owner might choose differently if:** they want to reach VST3-only DAWs or share with friends early
+(JUCE gets there in a day), or they prefer clap-helpers' safety net: it catches host-side contract
+violations in Debug builds that hand-written code silently tolerates.
 
 <!-- Append entries like:
 ### 2026-11-20: D5 decided: double phase in [0,1)

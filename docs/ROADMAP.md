@@ -195,7 +195,7 @@ Modes (tell Claude which one you want):
 - [x] L2.6 CPU budget & denormals ★M4
 
 ### Branch 3: Into the DAW
-- [ ] L3.1 The host/plugin contract
+- [x] L3.1 The host/plugin contract
 - [ ] L3.2 CLAP by hand
 - [ ] L3.3 VST3 / every DAW
 - [ ] L3.4 State & presets
