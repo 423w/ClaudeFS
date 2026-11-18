@@ -36,10 +36,12 @@ target_include_directories(fss_clap_sdk SYSTEM INTERFACE ${clap_SOURCE_DIR}/incl
 add_library(fss_clap_impl STATIC
     plugin.cpp
     state_v0.cpp
-    trace.cpp)
+    trace.cpp
+    editor_ui.cpp       # L3.5: what the editor draws (ImGui only, testable headlessly)
+    editor_win32.cpp)   # L3.5: the child window, D3D11 device and timer
 target_include_directories(fss_clap_impl PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(fss_clap_impl
-    PUBLIC  fss::core fss_clap_sdk
+    PUBLIC  fss::core fss_clap_sdk fss_imgui fss::preset_library
     PRIVATE fss::midi_message fss::warnings)
 target_compile_definitions(fss_clap_impl
     PUBLIC  FSS_VERSION_STRING="${PROJECT_VERSION}"

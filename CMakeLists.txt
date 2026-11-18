@@ -15,7 +15,7 @@
 cmake_minimum_required(VERSION 3.25)
 
 project(CFS
-    VERSION 0.3.4 # branch.lesson of the last finished lesson; the plugin reports it to the host
+    VERSION 0.3.5 # branch.lesson of the last finished lesson; the plugin reports it to the host
     DESCRIPTION "Claude's build of FirstStreetSynthesis, an FM-core hybrid synth"
     LANGUAGES CXX)
 
@@ -55,18 +55,21 @@ else()
     set(_fss_standalone_default OFF)
 endif()
 option(FSS_BUILD_STANDALONE "Build hosts/standalone (fetches miniaudio, D9)" ${_fss_standalone_default})
+# The CLAP plugin (L3.2, D13). Plain C ABI + the CLAP headers: no platform restriction in principle, but
+# only built and tested on Windows so far. (Its editor, L3.5, is Win32 + D3D11.)
+option(FSS_BUILD_CLAP "Build hosts/clap: CFS.clap and its test host (fetches the CLAP SDK)" ${WIN32})
+
+# Dear ImGui (D12, and D14 since L3.5) on Win32 + D3D11: the dev surface in fss_play AND the plugin's editor.
+if(WIN32 AND (FSS_BUILD_STANDALONE OR FSS_BUILD_CLAP))
+    add_subdirectory(hosts/devui) # fss_imgui + fss_devui: window, piano keyboard widget (fetches Dear ImGui)
+endif()
 if(FSS_BUILD_STANDALONE)
     add_subdirectory(hosts/standalone)
-    # L2.4 (D12): the dev control surface. Dear ImGui on Win32 + D3D11, so Windows only.
     if(WIN32)
-        add_subdirectory(hosts/devui) # fss_devui: window, piano keyboard widget (fetches Dear ImGui)
         add_subdirectory(hosts/play)  # fss_play: the playable synth = audio + MIDI + GUI + Engine
     endif()
 endif()
 
-# The CLAP plugin (L3.2, D13). Plain C ABI + the CLAP headers: no platform restriction in principle, but
-# only built and tested on Windows so far.
-option(FSS_BUILD_CLAP "Build hosts/clap: CFS.clap and its test host (fetches the CLAP SDK)" ${WIN32})
 if(FSS_BUILD_CLAP)
     add_subdirectory(hosts/clap)
 endif()

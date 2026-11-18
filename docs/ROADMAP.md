@@ -199,7 +199,7 @@ Modes (tell Claude which one you want):
 - [x] L3.2 CLAP by hand
 - [ ] L3.3 VST3 / every DAW
 - [x] L3.4 State & presets
-- [ ] L3.5 GUI I ★M5
+- [x] L3.5 GUI I ★M5 (everything headless passes; the FL Studio run is the owner's: docs/FL-STUDIO.md)
 - [ ] L3.6 GUI II: FFT & analyzer
 
 ### Branch 4: Sound Design Depth
@@ -223,6 +223,6 @@ Modes (tell Claude which one you want):
 - [ ] L6.1 Testing DSP
 - [ ] L6.2 Performance & SIMD
 - [ ] L6.3 Oversampling deep dive
-- [ ] L6.4 Robustness
+- [ ] L6.4 Robustness (Phase E slice in L3.2/L3.4: NaN guard, fuzzing, lifecycle, rates, block sizes; pluginval waits for VST3)
 - [ ] L6.5 Shipping
 - [ ] L6.6 Making music (never actually done)

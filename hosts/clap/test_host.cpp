@@ -92,8 +92,10 @@ struct InEvents {
 // Output events: we only count what we care about.
 struct OutEvents {
     int noteEnds = 0, paramValues = 0, gestures = 0, other = 0;
+    std::vector<std::uint16_t> types; // in order (the host's allocations: the DLL's trap doesn't see them)
     clap_output_events iface{this, [](const clap_output_events* l, const clap_event_header* h) {
                                  auto* self = static_cast<OutEvents*>(l->ctx);
+                                 self->types.push_back(h->type);
                                  if (h->type == CLAP_EVENT_NOTE_END)
                                      ++self->noteEnds;
                                  else if (h->type == CLAP_EVENT_PARAM_VALUE)
@@ -343,15 +345,179 @@ bool loadState(Instance& inst, const std::vector<std::uint8_t>& bytes, std::size
     return inst.state->load(inst.p, &is.iface);
 }
 
+// ---- the editor ------------------------------------------------------------------------------------------
+
+using EditorRender = bool (*)(const clap_plugin*);
+using EditorRect = bool (*)(const clap_plugin*, std::uint32_t, int*);
+using EditorSnapshot = bool (*)(const clap_plugin*, const char*);
+
+/// A hidden top-level window standing in for FL Studio's plugin window.
+HWND makeHostWindow()
+{
+    WNDCLASSW wc{};
+    wc.lpfnWndProc = DefWindowProcW;
+    wc.hInstance = GetModuleHandleW(nullptr);
+    wc.lpszClassName = L"fss_clap_host_window";
+    RegisterClassW(&wc); // fails harmlessly if already registered
+    return CreateWindowExW(0, wc.lpszClassName, L"host", WS_OVERLAPPEDWINDOW, 0, 0, 1400, 900, nullptr, nullptr,
+                           wc.hInstance, nullptr); // never shown: the editor renders off screen just the same
+}
+
+/// Process one 64-frame block so editor gestures reach the host as out_events.
+void pump(Instance& inst, OutEvents& out)
+{
+    std::vector<float> l(64), r(64);
+    float* ch[2] = {l.data(), r.data()};
+    clap_audio_buffer buf{};
+    buf.data32 = ch;
+    buf.channel_count = 2;
+    InEvents in;
+    clap_process proc{};
+    proc.frames_count = 64;
+    proc.audio_outputs = &buf;
+    proc.audio_outputs_count = 1;
+    proc.in_events = &in.iface;
+    proc.out_events = &out.iface;
+    inst.p->process(inst.p, &proc);
+}
+
+void testEditor(const Library& lib, const char* snapshotPath)
+{
+    const auto render = reinterpret_cast<EditorRender>(GetProcAddress(lib.dll, "fss_debug_editor_render"));
+    const auto rectOf = reinterpret_cast<EditorRect>(GetProcAddress(lib.dll, "fss_debug_editor_control_rect"));
+    const auto snap = reinterpret_cast<EditorSnapshot>(GetProcAddress(lib.dll, "fss_debug_editor_snapshot"));
+    check(render && rectOf && snap, "debug exports present");
+    if (!render || !rectOf || !snap)
+        return;
+    const HWND hostA = makeHostWindow(), hostB = makeHostWindow();
+    Instance a(lib), b(lib);
+    const auto* gui = static_cast<const clap_plugin_gui*>(a.p->get_extension(a.p, CLAP_EXT_GUI));
+    check(gui != nullptr, "clap.gui extension");
+    if (!gui)
+        return;
+    check(gui->is_api_supported(a.p, CLAP_WINDOW_API_WIN32, false), "embedded Win32 supported");
+    check(!gui->is_api_supported(a.p, CLAP_WINDOW_API_WIN32, true), "floating declined (asked first, as hosts do)");
+    a.p->activate(a.p, 48000.0, 1, 512);
+    a.p->start_processing(a.p);
+    bool ok = gui->create(a.p, CLAP_WINDOW_API_WIN32, false) && gui->set_scale(a.p, 1.0);
+    std::uint32_t w = 0, h = 0;
+    ok = ok && gui->get_size(a.p, &w, &h);
+    clap_window win{};
+    win.api = CLAP_WINDOW_API_WIN32;
+    win.win32 = hostA;
+    ok = ok && gui->set_parent(a.p, &win) && gui->show(a.p);
+    check(ok, "create, set_scale, get_size, set_parent, show");
+    std::printf("    editor size %ux%u\n", w, h);
+
+    // Two editors at once: each has its own ImGui context. Render them interleaved.
+    const auto* guiB = static_cast<const clap_plugin_gui*>(b.p->get_extension(b.p, CLAP_EXT_GUI));
+    clap_window winB{};
+    winB.api = CLAP_WINDOW_API_WIN32;
+    winB.win32 = hostB;
+    const bool okB = guiB->create(b.p, CLAP_WINDOW_API_WIN32, false) && guiB->set_parent(b.p, &winB) && guiB->show(b.p);
+    using clock = std::chrono::steady_clock;
+    const auto t0 = clock::now();
+    for (int f = 0; f < 120; ++f) {
+        render(a.p);
+        render(b.p);
+    }
+    const double msPerFrame = std::chrono::duration<double, std::milli>(clock::now() - t0).count() / 240.0;
+    check(okB, "a second instance's editor open at the same time");
+    std::printf("    %.2f ms per editor frame (CPU, main thread, incl. D3D11 submit)\n", msPerFrame);
+
+    // Every parameter has a control, and we know where each one is.
+    int missing = 0;
+    for (const synth::ParamInfo& p : synth::kParams) {
+        int rc[4];
+        missing += rectOf(a.p, p.id, rc) ? 0 : 1;
+    }
+    check(missing == 0, "every parameter has a control in the editor");
+
+    // Drag the cutoff knob upward with real mouse messages, the way a user does.
+    int rc[4] = {};
+    rectOf(a.p, synth::param_id::kCutoff, rc);
+    const HWND child = FindWindowExW(hostA, nullptr, L"CFS_PluginEditor", nullptr);
+    check(child != nullptr, "the editor is a child of the host's window");
+    double before = 0, after = 0;
+    a.params->get_value(a.p, synth::param_id::kCutoff, &before);
+    const int x = (rc[0] + rc[2]) / 2, y = rc[1] + (rc[3] - rc[1]) / 3;
+    OutEvents out;
+    auto at = [](int px, int py) { return static_cast<LPARAM>(MAKELONG(px, py)); };
+    SendMessageW(child, WM_MOUSEMOVE, 0, at(x, y));
+    render(a.p);
+    SendMessageW(child, WM_LBUTTONDOWN, MK_LBUTTON, at(x, y));
+    render(a.p);
+    for (int step = 1; step <= 6; ++step) { // 60 px up, in steps, rendering in between (like real frames)
+        SendMessageW(child, WM_MOUSEMOVE, MK_LBUTTON, at(x, y - 10 * step));
+        render(a.p);
+        pump(a, out); // the audio thread runs between frames too
+    }
+    SendMessageW(child, WM_LBUTTONUP, 0, at(x, y - 60));
+    render(a.p);
+    pump(a, out);
+    a.params->get_value(a.p, synth::param_id::kCutoff, &after);
+    const bool begins = !out.types.empty() && out.types.front() == CLAP_EVENT_PARAM_GESTURE_BEGIN;
+    const bool ends = !out.types.empty() && out.types.back() == CLAP_EVENT_PARAM_GESTURE_END;
+    const int values = static_cast<int>(std::count(out.types.begin(), out.types.end(), CLAP_EVENT_PARAM_VALUE));
+    std::printf("    drag: %zu events to the host (%d values), cutoff knob %.3f -> %.3f\n", out.types.size(), values,
+                before, after);
+    check(begins && ends && values >= 3, "the drag reached the host as GESTURE_BEGIN, PARAM_VALUE..., GESTURE_END");
+    check(after > before + 0.05, "the knob moved up and the plugin's value followed");
+
+    // Host automation moves the knob: send a PARAM_VALUE, render, and the editor draws the new value.
+    Score s;
+    s.param(0, synth::param_id::kResonance, 0.9);
+    InEvents in;
+    in.list.push_back(&s.events[0].header);
+    OutEvents out2;
+    std::vector<float> l(64), r(64);
+    float* ch[2] = {l.data(), r.data()};
+    clap_audio_buffer buf{};
+    buf.data32 = ch;
+    buf.channel_count = 2;
+    clap_process proc{};
+    proc.frames_count = 64;
+    proc.audio_outputs = &buf;
+    proc.audio_outputs_count = 1;
+    proc.in_events = &in.iface;
+    proc.out_events = &out2.iface;
+    a.p->process(a.p, &proc);
+    render(a.p);
+    double q = 0;
+    a.params->get_value(a.p, synth::param_id::kResonance, &q);
+    check(std::abs(q - 0.9) < 1e-5 && out2.types.empty(), "automation reaches the editor's model, and isn't echoed back to the host");
+
+    if (snapshotPath) {
+        check(snap(a.p, snapshotPath), "snapshot written");
+        std::printf("    snapshot: %s\n", snapshotPath);
+    }
+    // Resize, hide, destroy, in host order.
+    check(gui->set_size(a.p, 1300, 800) && gui->hide(a.p), "set_size + hide");
+    render(a.p);
+    gui->destroy(a.p);
+    guiB->destroy(b.p);
+    a.p->stop_processing(a.p);
+    a.p->deactivate(a.p);
+    DestroyWindow(hostA);
+    DestroyWindow(hostB);
+}
+
 } // namespace
 
 int main(int argc, char** argv)
 {
     if (argc < 2) {
-        std::printf("usage: fss_clap_host <path to CFS.clap> [--bench]\n");
+        std::printf("usage: fss_clap_host <path to CFS.clap> [--bench] [--snapshot <file.bmp>]\n");
         return 2;
     }
-    const bool bench = argc > 2 && std::strcmp(argv[2], "--bench") == 0;
+    bool bench = false;
+    const char* snapshotPath = nullptr;
+    for (int a = 2; a < argc; ++a) {
+        if (std::strcmp(argv[a], "--bench") == 0)
+            bench = true;
+        else if (std::strcmp(argv[a], "--snapshot") == 0 && a + 1 < argc)
+            snapshotPath = argv[++a];
+    }
     const double sr = 48000.0;
 
     std::printf("1. Loading %s\n", argv[1]);
@@ -507,14 +673,17 @@ int main(int argc, char** argv)
         }
     }
 
+    std::printf("7. Editor (clap.gui): a real window inside a hidden host window, driven by real mouse messages\n");
+    testEditor(lib, snapshotPath);
+
     using DebugCount = std::uint64_t (*)();
     if (auto f = reinterpret_cast<DebugCount>(GetProcAddress(lib.dll, "fss_debug_rt_violations"))) {
-        std::printf("7. Real-time audit (Debug build: allocation trap linked into the DLL)\n");
+        std::printf("8. Real-time audit (Debug build: allocation trap linked into the DLL)\n");
         check(f() == 0, "0 allocations inside process()/flush()");
     }
 
     if (bench) {
-        std::printf("8. Overhead of the CLAP layer (16-voice pad, 256-frame blocks, 4 s)\n");
+        std::printf("9. Overhead of the CLAP layer (16-voice pad, 256-frame blocks, 4 s)\n");
         Score s;
         for (int k = 0; k < 16; ++k)
             s.note(0, CLAP_EVENT_NOTE_ON, 40 + 3 * k, 0.7, k);

@@ -18,8 +18,11 @@ cmake --workflow --preset release      # configure + build + test (or: debug pre
 .\build\release\hosts\play\fss_play.exe --exclusive --period 64   # THE synth: GUI, mouse/QWERTY/MIDI, every parameter (L2.4)
 .\build\release\hosts\standalone\fss_standalone.exe --keys --exclusive --period 64 --seconds 60   # console host (L2.1-L2.3)
 python tools\analyze\plot_spectrum.py renders\some.wav --peaks 10   # also: plot_wave.py, spectrogram.py
+.\build\release\hosts\clap\fss_clap_host.exe .\build\release\hosts\clap\CFS.clap --bench   # headless CLAP host checks (L3.2+)
+.\tools\install_clap.ps1               # (elevated) copy CFS.clap where FL Studio finds it: see docs/FL-STUDIO.md
 ```
-The first configure downloads Catch2 (pinned by hash) into `build/`. Plots and renders go in `renders/` (git-ignored).
+The first configure downloads the pinned dependencies (Catch2, miniaudio, Dear ImGui, the CLAP SDK, clap-validator)
+into `build/`. Plots and renders go in `renders/` (git-ignored). Factory presets are text files in `presets/factory/`.
 
 ## Start here
 - **[docs/ROADMAP.md](docs/ROADMAP.md)**: the lesson tree, the route, and CFS's progress.

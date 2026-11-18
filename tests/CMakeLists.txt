@@ -51,7 +51,7 @@ catch_discover_tests(fss_tests)
 # ---- the CLAP plugin (L3.2) --------------------------------------------------------------------------
 if(TARGET fss_clap)
     # In-process tests: the plugin's C function tables called directly (no DLL), with a fake host.
-    add_executable(fss_clap_tests test_clap.cpp)
+    add_executable(fss_clap_tests test_clap.cpp test_editor.cpp)
     target_link_libraries(fss_clap_tests PRIVATE fss_clap_impl fss::midi_message fss_rt_trap fss::warnings
         Catch2::Catch2WithMain)
     catch_discover_tests(fss_clap_tests)

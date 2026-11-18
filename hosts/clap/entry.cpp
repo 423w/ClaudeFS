@@ -6,7 +6,9 @@
 // clap_entry is a VARIABLE, not a function (L3.1's surprise): a const struct, initialized at compile time,
 // so no code of ours runs when the DLL is loaded. That matters during a scan, when a host may load hundreds
 // of plugins just to read their names.
+#include "editor_win32.h"
 #include "plugin.h"
+#include "plugin_instance.h"
 
 #include <clap/clap.h>
 #include <fss/util/realtime_guard.h>
@@ -55,6 +57,26 @@ extern "C" {
 // CLAP_EXPORT is __declspec(dllexport) on Windows: it puts the symbol in the DLL's export table, where
 // GetProcAddress finds it. extern "C" stops C++ name mangling, so the exported name is exactly "clap_entry".
 CLAP_EXPORT const clap_plugin_entry clap_entry = {CLAP_VERSION_INIT, entryInit, entryDeinit, entryGetFactory};
+
+// For the headless test host: draw the editor of an instance created by this DLL, find a control, save a
+// screenshot. Not part of CLAP; harmless if a host never calls them. Main thread only, like clap.gui.
+__declspec(dllexport) bool fss_debug_editor_render(const clap_plugin* p)
+{
+    auto* e = fss::plugin::FssClap::self(p)->editorWindow();
+    if (e)
+        e->renderNow();
+    return e != nullptr;
+}
+__declspec(dllexport) bool fss_debug_editor_control_rect(const clap_plugin* p, std::uint32_t paramId, int* rect4)
+{
+    auto* e = fss::plugin::FssClap::self(p)->editorWindow();
+    return e && e->controlRect(paramId, rect4);
+}
+__declspec(dllexport) bool fss_debug_editor_snapshot(const clap_plugin* p, const char* bmpPath)
+{
+    auto* e = fss::plugin::FssClap::self(p)->editorWindow();
+    return e && e->snapshot(bmpPath);
+}
 
 #ifdef FSS_RT_TRAP_LINKED
 // Debug builds only: how many allocations happened inside a RealtimeGuard (process/flush) in this DLL.

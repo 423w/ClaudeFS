@@ -93,7 +93,7 @@ MIDI CC knobs only / Dear ImGui window / terminal UI. Dear ImGui is quick and le
 Recommendation: CLAP by hand first (L3.2). Use JUCE later if you want its GUI toolkit. Because the core is
 host-agnostic, both can coexist.
 
-### D14. GUI technology: `OPEN`  *(L3.5)*
+### D14. GUI technology: `DECIDED` → Dear ImGui in an embedded Win32 child window (D3D11)  *(L3.5, see Log)*
 JUCE components / Dear ImGui embedded in the host window / VSTGUI / a WebView UI (HTML/JS) /
 hand-rolled with a 2D library. Trade-offs: control vs. effort vs. how pretty it gets.
 
@@ -428,6 +428,25 @@ detect truncation.
 **The owner might choose differently if:** they prefer JSON for tooling (any editor validates it; a
 single-header library like nlohmann/json is a fine dependency), or binary for compactness, in which case a
 version field, a size field and a fixture file per old version are the minimum.
+
+### 2026-11-18: D14 decided (CFS, L3.5): Dear ImGui, embedded Win32 child window, D3D11
+**Decision.** The plugin editor is Dear ImGui 1.91.9b (already pinned for D12) drawn with D3D11 into a
+`WS_CHILD` window inside the host's plugin window. One ImGui context per editor, made current at every entry
+point; a 60 Hz `WM_TIMER` redraws; `Present(0, 0)` (no vsync wait on the host's UI thread); no imgui.ini.
+The UI code (`editor_ui.*`) is platform-free and talks to an `EditorModel` (the plugin's main-thread mirror
+plus gesture calls), so it's testable headlessly. Embedded Win32 only for now; resizable with a minimum size.
+**Options considered.** JUCE components; VSTGUI; a WebView (WebView2 + HTML/JS); hand-rolled GDI/Direct2D;
+Dear ImGui (chosen).
+**Why.** No new download (ImGui is pinned), every control generated from the param table in a few lines,
+immediate mode makes "the knobs follow automation" free (each frame redraws from the model), and
+`IsItemActivated`/`IsItemDeactivated` map 1:1 onto CLAP's gesture begin/end. Measured: 0.49 ms CPU per frame.
+ImGui will also host L3.6's scope and spectrum analyzer.
+**Revisit if:** the editor needs to look like a commercial product (custom-drawn ImGui goes a long way, but
+a skinned toolkit or a WebView looks better for less effort at that point); accessibility (screen readers)
+matters; or macOS/Linux builds arrive (swap the D3D11 backend for Metal/OpenGL, the UI code stays).
+**The owner might choose differently if:** they want to learn a retained-mode toolkit (VSTGUI or JUCE),
+they care most about looks (a WebView with HTML/CSS), or they want zero third-party code in the plugin
+(hand-rolled Direct2D is very educational, and a lot more work per widget).
 
 <!-- Append entries like:
 ### 2026-11-20: D5 decided: double phase in [0,1)

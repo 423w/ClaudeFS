@@ -19,6 +19,7 @@
 #pragma once
 
 #include "clap_params.h"
+#include "editor_ui.h"
 #include "trace.h"
 
 #include <clap/clap.h>
@@ -31,13 +32,17 @@
 #include <atomic>
 #include <bitset>
 #include <cstdint>
+#include <memory>
 #include <string>
 
 namespace fss::plugin {
 
-class FssClap {
+class EditorWindow;
+
+class FssClap final : public EditorModel {
 public:
     explicit FssClap(const clap_host* host);
+    ~FssClap() override;
 
     clap_plugin plugin_{}; // what the host holds; plugin_data points back at this object
     [[nodiscard]] static FssClap* self(const clap_plugin* p) noexcept { return static_cast<FssClap*>(p->plugin_data); }
@@ -77,6 +82,28 @@ public:
     [[nodiscard]] float meterPeak() const noexcept { return peak_.load(std::memory_order_relaxed); }
     [[nodiscard]] int meterVoices() const noexcept { return voices_.load(std::memory_order_relaxed); }
 
+    // ---- clap.gui (L3.5) [main] -------------------------------------------------------------------------
+    bool guiCreate(const char* api, bool isFloating);
+    void guiDestroy();
+    bool guiSetScale(double scale);
+    bool guiGetSize(std::uint32_t* width, std::uint32_t* height);
+    bool guiAdjustSize(std::uint32_t* width, std::uint32_t* height);
+    bool guiSetSize(std::uint32_t width, std::uint32_t height);
+    bool guiSetParent(const clap_window* window);
+    bool guiShow();
+    bool guiHide();
+    [[nodiscard]] EditorWindow* editorWindow() noexcept { return editor_.get(); } // tests / debug exports
+
+    // ---- EditorModel: what the editor sees of the plugin [main] ------------------------------------------
+    const synth::Patch& editorPatch() override { return mainPatch(); }
+    void beginEdit(std::size_t index) override { uiBegin(index); }
+    void setEdit(std::size_t index, float plain) override { uiSet(index, plain); }
+    void endEdit(std::size_t index) override { uiEnd(index); }
+    void loadPreset(const synth::Patch& patch, const std::string& name) override;
+    const std::string& currentPresetName() override { return presetName_; }
+    float peakLevel() override { return meterPeak(); }
+    int activeVoices() override { return meterVoices(); }
+
 private:
     struct UiMsg {
         enum class Kind : std::uint8_t { Begin, Value, End } kind = Kind::Value;
@@ -102,8 +129,10 @@ private:
     const clap_host* host_;
     const clap_host_params* hostParams_ = nullptr;
     const clap_host_log* hostLog_ = nullptr;
+    const clap_host_state* hostState_ = nullptr;
+    std::unique_ptr<EditorWindow> editor_;
     synth::Patch mirror_{};
-    std::string presetName_;               // saved with the state; shown by the editor (L3.5)
+    std::string presetName_ = "Init";      // saved with the state; shown by the editor (L3.5)
     std::array<bool, kNumParams> gesture_{};
     bool active_ = false;
 

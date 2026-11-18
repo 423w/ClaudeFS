@@ -6,6 +6,7 @@
 // and runBlock() (the audio path), then the parameter sync (main thread side).
 #include "plugin.h"
 
+#include "editor_win32.h"
 #include "plugin_instance.h"
 #include "state_v0.h"
 
@@ -19,6 +20,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <memory>
 #include <span>
 #include <string>
 #include <vector>
@@ -99,12 +101,15 @@ FssClap::FssClap(const clap_host* host) : host_(host)
     lastChannel_.fill(0);
 }
 
+FssClap::~FssClap() = default; // here, where EditorWindow is a complete type (unique_ptr needs it)
+
 bool FssClap::init()
 {
     // Host extensions may only be queried from init() on (not in the constructor: create_plugin may run on
     // any thread, and the host isn't required to be ready yet).
     hostParams_ = static_cast<const clap_host_params*>(host_->get_extension(host_, CLAP_EXT_PARAMS));
     hostLog_ = static_cast<const clap_host_log*>(host_->get_extension(host_, CLAP_EXT_LOG));
+    hostState_ = static_cast<const clap_host_state*>(host_->get_extension(host_, CLAP_EXT_STATE));
     if (Trace::enabled())
         Trace::log(this, "init: host \"%s\" %s (CLAP %u.%u.%u), CFS %s", host_->name ? host_->name : "?",
                    host_->version ? host_->version : "?", host_->clap_version.major, host_->clap_version.minor,
@@ -115,6 +120,7 @@ bool FssClap::init()
 void FssClap::destroy()
 {
     Trace::log(this, "destroy");
+    editor_.reset(); // hosts should call gui.destroy first; if one doesn't, don't leak a window
     delete this;
 }
 
@@ -549,6 +555,86 @@ bool FssClap::paramTextToValue(clap_id id, const char* text, double* out) const
 }
 
 // =====================================================================================================
+// The editor [main] (L3.5). Win32 + Dear ImGui; see editor_win32.h and editor_ui.h.
+// =====================================================================================================
+
+bool FssClap::guiCreate(const char* api, bool isFloating)
+{
+    // Embedded Win32 only. (Floating windows and other platforms' APIs can come later; a host that wants
+    // floating asks first with is_api_supported and gets "no".)
+    if (isFloating || !api || std::strcmp(api, CLAP_WINDOW_API_WIN32) != 0)
+        return false;
+    editor_ = std::make_unique<EditorWindow>(*this);
+    Trace::log(this, "gui.create");
+    return true;
+}
+
+void FssClap::guiDestroy()
+{
+    Trace::log(this, "gui.destroy");
+    editor_.reset();
+}
+
+bool FssClap::guiSetScale(double scale)
+{
+    Trace::log(this, "gui.set_scale %.2f", scale);
+    if (!editor_)
+        return false;
+    editor_->setScale(scale);
+    return true;
+}
+
+bool FssClap::guiGetSize(std::uint32_t* width, std::uint32_t* height)
+{
+    if (!editor_ || !width || !height)
+        return false;
+    editor_->size(*width, *height);
+    return true;
+}
+
+bool FssClap::guiAdjustSize(std::uint32_t* width, std::uint32_t* height)
+{
+    if (!editor_ || !width || !height)
+        return false;
+    editor_->adjustSize(*width, *height);
+    return true;
+}
+
+bool FssClap::guiSetSize(std::uint32_t width, std::uint32_t height)
+{
+    Trace::log(this, "gui.set_size %ux%u", width, height);
+    return editor_ && editor_->setSize(width, height);
+}
+
+bool FssClap::guiSetParent(const clap_window* window)
+{
+    Trace::log(this, "gui.set_parent");
+    return editor_ && window && editor_->setParent(window->win32);
+}
+
+bool FssClap::guiShow()
+{
+    Trace::log(this, "gui.show");
+    return editor_ && editor_->show();
+}
+
+bool FssClap::guiHide()
+{
+    Trace::log(this, "gui.hide");
+    return editor_ && editor_->hide();
+}
+
+void FssClap::loadPreset(const synth::Patch& patch, const std::string& name)
+{
+    presetName_ = name;
+    applyPatchFromMain(patch);
+    // Not a parameter gesture, so the host learns it from rescan (in applyPatchFromMain) and from this:
+    // "the plugin's state changed, the project needs saving".
+    if (hostState_)
+        hostState_->mark_dirty(host_);
+}
+
+// =====================================================================================================
 // State [main]
 // =====================================================================================================
 
@@ -678,6 +764,39 @@ const clap_plugin_voice_info kVoiceInfo = {
     },
 };
 
+const clap_plugin_gui kGuiExt = {
+    [](const clap_plugin*, const char* api, bool isFloating) -> bool {
+        return !isFloating && api && std::strcmp(api, CLAP_WINDOW_API_WIN32) == 0;
+    },
+    [](const clap_plugin*, const char** api, bool* isFloating) -> bool {
+        if (!api || !isFloating)
+            return false;
+        *api = CLAP_WINDOW_API_WIN32;
+        *isFloating = false;
+        return true;
+    },
+    [](const clap_plugin* p, const char* api, bool isFloating) { return FssClap::self(p)->guiCreate(api, isFloating); },
+    [](const clap_plugin* p) { FssClap::self(p)->guiDestroy(); },
+    [](const clap_plugin* p, double scale) { return FssClap::self(p)->guiSetScale(scale); },
+    [](const clap_plugin* p, std::uint32_t* w, std::uint32_t* h) { return FssClap::self(p)->guiGetSize(w, h); },
+    [](const clap_plugin*) -> bool { return true; }, // can_resize
+    [](const clap_plugin*, clap_gui_resize_hints* hints) -> bool {
+        if (!hints)
+            return false;
+        hints->can_resize_horizontally = hints->can_resize_vertically = true;
+        hints->preserve_aspect_ratio = false;
+        hints->aspect_ratio_width = hints->aspect_ratio_height = 1;
+        return true;
+    },
+    [](const clap_plugin* p, std::uint32_t* w, std::uint32_t* h) { return FssClap::self(p)->guiAdjustSize(w, h); },
+    [](const clap_plugin* p, std::uint32_t w, std::uint32_t h) { return FssClap::self(p)->guiSetSize(w, h); },
+    [](const clap_plugin* p, const clap_window* window) { return FssClap::self(p)->guiSetParent(window); },
+    [](const clap_plugin*, const clap_window*) -> bool { return false; }, // set_transient: floating only
+    [](const clap_plugin*, const char*) {},                              // suggest_title: floating only
+    [](const clap_plugin* p) { return FssClap::self(p)->guiShow(); },
+    [](const clap_plugin* p) { return FssClap::self(p)->guiHide(); },
+};
+
 } // namespace
 
 const void* FssClap::getExtension(const char* id) const noexcept
@@ -694,6 +813,8 @@ const void* FssClap::getExtension(const char* id) const noexcept
         return &kStateExt;
     if (std::strcmp(id, CLAP_EXT_VOICE_INFO) == 0)
         return &kVoiceInfo;
+    if (std::strcmp(id, CLAP_EXT_GUI) == 0)
+        return &kGuiExt;
     return nullptr;
 }
 
