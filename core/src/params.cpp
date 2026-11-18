@@ -4,6 +4,8 @@
 
 #include <fss/util/math.h>
 
+#include <initializer_list>
+
 namespace fss::synth {
 
 float getParam(const Patch& patch, const ParamInfo& p) noexcept
@@ -128,6 +130,32 @@ void setParam(Patch& patch, const ParamInfo& p, float plain) noexcept
     case OpField::Release: o.env.releaseMs = v; break;
     case OpField::Feedback: patch.algorithm.mod[i][i] = v; break;
     }
+}
+
+std::string_view valueLabel(const ParamInfo& p, int value) noexcept
+{
+    // Index into a fixed list, or "" if out of range (a corrupt value must not read past the end).
+    auto pick = [value](std::initializer_list<std::string_view> names) -> std::string_view {
+        return value >= 0 && static_cast<std::size_t>(value) < names.size() ? names.begin()[value] : std::string_view{};
+    };
+    if (p.skew != Skew::Stepped)
+        return {};
+    switch (p.id) {
+    case param_id::kAlgorithm:
+        return value >= 1 && value <= static_cast<int>(kAlgorithms.size())
+                   ? std::string_view(kAlgorithms[static_cast<std::size_t>(value - 1)].name)
+                   : std::string_view{};
+    case param_id::kFilterMode: return pick({"Off", "Low-pass", "Band-pass", "High-pass", "Notch"});
+    case param_id::kLfo1Shape:
+    case param_id::kLfo2Shape:
+        return pick({"Sine", "Triangle", "Saw up", "Saw down", "Square", "Sample & hold", "Smooth random"});
+    case param_id::kVoiceMode: return pick({"Poly", "Mono", "Legato"});
+    case param_id::kPriority: return pick({"Last", "Low", "High"});
+    default: break;
+    }
+    if (p.unit == "on/off")
+        return pick({"Off", "On"});
+    return {};
 }
 
 } // namespace fss::synth

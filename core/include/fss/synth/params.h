@@ -12,6 +12,9 @@
 //
 // VALUES are always *plain* (the unit shown in `unit`: Hz, ms, dB...). The normalized 0..1 form, which is
 // what a knob or a CLAP host deals in, comes from toNormalized/fromNormalized, using the parameter's skew.
+// Since L3.2 the CLAP host sees continuous parameters as that 0..1 knob position, so a continuous
+// parameter's min, max and skew are part of the stable contract too: changing them changes the meaning of
+// every saved DAW automation clip. (Presets store plain values and are unaffected.)
 #pragma once
 
 #include <fss/synth/patch.h>
@@ -227,5 +230,10 @@ inline constexpr std::string_view kOpNames[kNumOps] = {"A", "B", "C", "D"};
 [[nodiscard]] float getParam(const Patch& patch, const ParamInfo& p) noexcept;
 /// Write parameter `p` (plain units; clamped to range) into a patch.
 void setParam(Patch& patch, const ParamInfo& p, float plain) noexcept;
+
+/// The name of a stepped parameter's value ("Low-pass", "Saw up", "On", an algorithm's diagram), or an
+/// empty view if the parameter has no names (continuous parameters, plain counts like bend range).
+/// One list for every host: the dev UI, the CLAP plugin's value_to_text (L3.2) and its editor (L3.5).
+[[nodiscard]] std::string_view valueLabel(const ParamInfo& p, int value) noexcept;
 
 } // namespace fss::synth

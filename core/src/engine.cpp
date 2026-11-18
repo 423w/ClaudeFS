@@ -100,6 +100,22 @@ void Engine::process(std::span<const Event> events, float* outL, float* outR, in
     } else {
         processEvents(events, outL, outR, numFrames);
     }
+
+    // Last line of defence (L6.4): a NaN or Inf must never reach a host. One NaN in a DAW's mixer can
+    // poison every bus after it (and some hosts mute the whole track until it's reloaded). If anything in the
+    // block isn't finite, the block becomes silence and every voice and filter restarts from a clean state,
+    // so the bad value can't keep circulating in a feedback path or a filter's state. `x - x` is 0 for every
+    // finite x and NaN for NaN/±Inf, so summing it is a cheap, branch-free test of the whole block.
+    // (This relies on IEEE arithmetic: MSVC's default /fp:precise keeps `x - x`; /fp:fast could fold it to 0.)
+    float check = 0.0f;
+    for (int i = 0; i < numFrames; ++i)
+        check += (outL[i] - outL[i]) + (outR[i] - outR[i]);
+    if (!(check == 0.0f)) { // NaN compares unequal to everything, so this is "check is NaN"
+        std::fill(outL, outL + numFrames, 0.0f);
+        std::fill(outR, outR + numFrames, 0.0f);
+        reset();
+        ++nonFiniteBlocks_;
+    }
 }
 
 void Engine::processEvents(std::span<const Event> events, float* outL, float* outR, int numFrames) noexcept

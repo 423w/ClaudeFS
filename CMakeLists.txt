@@ -4,6 +4,7 @@
 #   core/          fss_core: the DSP + synth library. Standard library only.
 #   tools/render/  offline CLI host (prints "hello" for now; renders WAVs from L1.1)
 #   hosts/standalone/ real-time host: plays through the audio device (L2.1, miniaudio)
+#   hosts/clap/    CFS.clap, the plugin (L3.2, hand-written CLAP), and a headless test host
 #   tests/         Catch2 unit tests (D4)
 #
 # Configure/build/test with the presets (run tools/devshell.ps1 first so cl, cmake and ninja are on PATH):
@@ -14,7 +15,7 @@
 cmake_minimum_required(VERSION 3.25)
 
 project(CFS
-    VERSION 0.0.1
+    VERSION 0.3.2 # branch.lesson of the last finished lesson; the plugin reports it to the host
     DESCRIPTION "Claude's build of FirstStreetSynthesis, an FM-core hybrid synth"
     LANGUAGES CXX)
 
@@ -60,6 +61,13 @@ if(FSS_BUILD_STANDALONE)
         add_subdirectory(hosts/devui) # fss_devui: window, piano keyboard widget (fetches Dear ImGui)
         add_subdirectory(hosts/play)  # fss_play: the playable synth = audio + MIDI + GUI + Engine
     endif()
+endif()
+
+# The CLAP plugin (L3.2, D13). Plain C ABI + the CLAP headers: no platform restriction in principle, but
+# only built and tested on Windows so far.
+option(FSS_BUILD_CLAP "Build hosts/clap: CFS.clap and its test host (fetches the CLAP SDK)" ${WIN32})
+if(FSS_BUILD_CLAP)
+    add_subdirectory(hosts/clap)
 endif()
 
 if(FSS_BUILD_TESTS)

@@ -387,6 +387,26 @@ framework, is the fix); or VST3/AU become urgent and clap-wrapper can't express 
 (JUCE gets there in a day), or they prefer clap-helpers' safety net: it catches host-side contract
 violations in Debug builds that hand-written code silently tolerates.
 
+### 2026-11-18: L3.2 plugin conventions (CFS; not a numbered decision)
+**Decision.** (1) **Host values:** continuous parameters are exposed to the host as the knob position 0..1
+(`toNormalized`, skew applied); stepped parameters as their plain integers. Text always shows plain units.
+(2) **Plugin id** `io.github.423w.claudefs`, name "CFS", vendor "ClaudeFS" (distinct from the owner's FSS,
+so both can sit in one FL project). (3) **State v0**: a minimal binary format until D15 (L3.4), which must
+keep loading it. (4) **`CLAP_PROCESS_SLEEP`** when a block is exactly zero and no voice is busy.
+**Options considered.** Plain values for everything (CLAP's general advice: robust to range changes);
+normalized for everything (VST3 style, but CLAP asks for plain stepped values); the mix (chosen).
+**Why.** CLAP has no skew metadata, so a host draws automation linearly between min and max. With plain Hz,
+everything below 1 kHz of a 20 Hz–20 kHz cutoff lives in the bottom 5 % of an FL automation clip; with the
+knob position, the clip moves the way CFS's own knob does. Stepped values stay plain because hosts list them.
+**Cost.** A continuous parameter's **range and skew are now part of the stable contract**, like its id:
+changing either changes the meaning of every saved automation clip (presets store plain values, so they're
+safe). Noted in `params.h` and `clap_params.h`.
+**Revisit if:** a host misbehaves with 0..1 ranges, or we need to widen a range (then: a new parameter id,
+and a state migration that maps the old one).
+**The owner might choose differently if:** they follow CLAP's advice literally (plain values, robust to
+range changes) and accept linear automation curves, or they plan a VST3 build first (VST3 is 0..1 for
+everything, and clap-wrapper then has to convert stepped parameters).
+
 <!-- Append entries like:
 ### 2026-11-20: D5 decided: double phase in [0,1)
 Why: ...

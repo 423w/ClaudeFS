@@ -62,6 +62,9 @@ public:
     /// should be in these states".
     [[nodiscard]] const std::array<synth::Voice, kNumVoices>& voices() const noexcept { return voices_; }
     [[nodiscard]] bool sustainPedal() const noexcept { return sustainPedal_; }
+    /// How many blocks came out non-finite (NaN/Inf) and were replaced by silence + a voice reset (L6.4).
+    /// Should stay 0 forever; a host may poll it and log a warning (never on the audio thread).
+    [[nodiscard]] std::uint64_t nonFiniteBlocks() const noexcept { return nonFiniteBlocks_; }
 
 private:
     void processEvents(std::span<const Event> events, float* outL, float* outR, int numFrames) noexcept;
@@ -104,6 +107,7 @@ private:
     float lastPitch_ = 0.0f;              // where the last note started or ended up: glides start here
     bool hasLastPitch_ = false;
     std::uint64_t noteCounter_ = 0, steals_ = 0;
+    std::uint64_t nonFiniteBlocks_ = 0;
 };
 
 /// The output stage's safety soft clip: transparent below ±0.8, then a smooth knee that never exceeds ±1.

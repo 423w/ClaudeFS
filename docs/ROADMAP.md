@@ -196,7 +196,7 @@ Modes (tell Claude which one you want):
 
 ### Branch 3: Into the DAW
 - [x] L3.1 The host/plugin contract
-- [ ] L3.2 CLAP by hand
+- [x] L3.2 CLAP by hand
 - [ ] L3.3 VST3 / every DAW
 - [ ] L3.4 State & presets
 - [ ] L3.5 GUI I ★M5

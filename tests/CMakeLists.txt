@@ -45,3 +45,20 @@ target_link_libraries(fss_tests PRIVATE fss::core fss::wav fss::score fss::midi_
 list(APPEND CMAKE_MODULE_PATH ${catch2_SOURCE_DIR}/extras)
 include(Catch)
 catch_discover_tests(fss_tests)
+
+# ---- the CLAP plugin (L3.2) --------------------------------------------------------------------------
+if(TARGET fss_clap)
+    # In-process tests: the plugin's C function tables called directly (no DLL), with a fake host.
+    add_executable(fss_clap_tests test_clap.cpp)
+    target_link_libraries(fss_clap_tests PRIVATE fss_clap_impl fss::midi_message fss_rt_trap fss::warnings
+        Catch2::Catch2WithMain)
+    catch_discover_tests(fss_clap_tests)
+
+    # The real DLL, loaded by our headless host exactly like a DAW would.
+    add_test(NAME clap_test_host COMMAND fss_clap_host $<TARGET_FILE:fss_clap>)
+
+    # clap-validator (free-audio): the community's conformance suite. --only-failed keeps the log short.
+    if(FSS_CLAP_VALIDATOR_EXE)
+        add_test(NAME clap_validator COMMAND ${FSS_CLAP_VALIDATOR_EXE} validate --only-failed $<TARGET_FILE:fss_clap>)
+    endif()
+endif()

@@ -297,25 +297,11 @@ void drawMain(synth::Patch& patch, PlayHost& host, const standalone::DeviceInfo&
         ImGui::SameLine(ImGui::GetFontSize() * 6.5f); // label column scales with font (= with DPI)
         ImGui::SetNextItemWidth(-1);
         paramWidget(p, patch, host);
-        if (p.id == synth::param_id::kAlgorithm)
-            ImGui::TextDisabled("  %s", synth::kAlgorithms[static_cast<std::size_t>(patch.algorithmNumber - 1)].name);
-        if (p.id == synth::param_id::kFilterMode) {
-            static constexpr const char* kModeNames[] = {"Off", "Low-pass", "Band-pass", "High-pass", "Notch"};
-            ImGui::TextDisabled("  %s", kModeNames[static_cast<std::size_t>(patch.filter.mode)]);
-        }
-        if (p.id == synth::param_id::kLfo1Shape || p.id == synth::param_id::kLfo2Shape) {
-            static constexpr const char* kShapeNames[] = {"Sine", "Triangle", "Saw up", "Saw down",
-                                                          "Square", "Sample & hold", "Smooth random"};
-            const auto shape = p.id == synth::param_id::kLfo1Shape ? patch.lfo1.shape : patch.lfo2.shape;
-            ImGui::TextDisabled("  %s", kShapeNames[static_cast<std::size_t>(shape)]);
-        }
-        if (p.id == synth::param_id::kVoiceMode) {
-            static constexpr const char* kModes[] = {"Poly", "Mono (retrigger)", "Legato"};
-            ImGui::TextDisabled("  %s", kModes[static_cast<std::size_t>(patch.voice.mode)]);
-        }
-        if (p.id == synth::param_id::kPriority) {
-            static constexpr const char* kPrio[] = {"Last note", "Lowest note", "Highest note"};
-            ImGui::TextDisabled("  %s", kPrio[static_cast<std::size_t>(patch.voice.priority)]);
+        // Stepped parameters show their value's name (one list in core: synth::valueLabel, L3.2).
+        if (p.skew == synth::Skew::Stepped) {
+            const std::string_view label = synth::valueLabel(p, static_cast<int>(synth::getParam(patch, p)));
+            if (!label.empty() && p.unit != "on/off")
+                ImGui::TextDisabled("  %.*s", static_cast<int>(label.size()), label.data());
         }
     }
 
