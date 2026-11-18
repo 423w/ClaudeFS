@@ -57,7 +57,19 @@ public:
         env_.reset();
     }
 
-    void setFrequency(double hz) noexcept { phasor_.setFrequency(hz); }
+    /// The operator's own frequency (from the note, ratio, detune, bend). Pitch modulation multiplies it.
+    void setFrequency(double hz) noexcept
+    {
+        baseHz_ = hz;
+        phasor_.setFrequency(baseHz_ * pitchRatio_);
+    }
+    /// Pitch modulation as a frequency ratio (vibrato, glide: L1.11/L2.5). 1.0 = none; multiplying by exactly
+    /// 1.0 changes nothing, so unmodulated notes are bit-identical to before. Phase stays continuous.
+    void setPitchRatio(double ratio) noexcept
+    {
+        pitchRatio_ = ratio;
+        phasor_.setFrequency(baseHz_ * pitchRatio_);
+    }
     void setEnvelope(const dsp::AdsrParams& p) noexcept { env_.setParams(p); }
     /// Output amplitude (carrier) or peak modulation index in radians (modulator). See header.
     /// Jumps immediately: for note starts, when the envelope is at zero anyway.
@@ -86,6 +98,7 @@ public:
 
 private:
     dsp::Phasor phasor_;
+    double baseHz_ = 0.0, pitchRatio_ = 1.0;
     dsp::Adsr env_;
     dsp::OnePoleSmoother level_{};
 };

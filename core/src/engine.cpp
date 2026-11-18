@@ -27,6 +27,10 @@ void Engine::prepare(double sampleRate, int /*maxBlockSize*/, float stealFadeMs)
     gain_.prepare(sampleRate, gainMs);
     cutoffOctaves_.prepare(sampleRate, cutoffMs);
     q_.prepare(sampleRate, qMs);
+    lfo2_.prepare(sampleRate);
+    lfo1Reference_.prepare(sampleRate);
+    // A 7-bit mod wheel moves in steps of 1/127; 10 ms smoothing turns them into a glide (like L2.4's knobs).
+    modWheel_.prepare(sampleRate, smoothing_ ? 10.0f : 0.0f);
     reset();
 }
 
@@ -38,6 +42,15 @@ void Engine::setPatch(const synth::Patch& patch) noexcept
     gain_.reset(patch.outputGain);
     cutoffOctaves_.reset(std::log2(patch.filter.cutoffHz));
     q_.reset(patch.filter.q);
+    restartLfos();
+}
+
+void Engine::restartLfos() noexcept
+{
+    lfo2_.setRate(patch_.lfo2.rateHz);
+    lfo2_.restart(0, 0x5EED1234u);
+    lfo1Reference_.setFrequency(patch_.lfo1.rateHz);
+    lfo1Reference_.reset(0);
 }
 
 void Engine::reset() noexcept
@@ -51,6 +64,8 @@ void Engine::reset() noexcept
     gain_.reset(patch_.outputGain);
     cutoffOctaves_.reset(std::log2(patch_.filter.cutoffHz));
     q_.reset(patch_.filter.q);
+    modWheel_.reset(0.0f);
+    restartLfos();
 }
 
 void Engine::setPolyphony(int voices) noexcept
@@ -105,6 +120,10 @@ void Engine::handle(const Event& e) noexcept
     case Event::Type::ParamChange:
         paramChange(e);
         break;
+    case Event::Type::Controller:
+        if (e.key == 1) // CC 1: mod wheel → vibrato depth (patch.routes.wheelVibratoSemitones)
+            modWheel_.setTarget(std::clamp(e.value, 0.0f, 1.0f));
+        break;
     }
 }
 
@@ -149,7 +168,15 @@ void Engine::paramChange(const Event& e) noexcept
         q_.setTarget(patch_.filter.q);
         break;
     case synth::ParamTarget::Filter:
-        break; // voices read mode / amounts from the patch every sample
+    case synth::ParamTarget::Lfo:
+        break; // voices and render() read these from the patch every sample (or at the next note)
+    case synth::ParamTarget::LfoRate:
+        lfo2_.setRate(patch_.lfo2.rateHz);
+        lfo1Reference_.setFrequency(patch_.lfo1.rateHz);
+        for (synth::Voice& v : voices_)
+            if (v.busy())
+                v.refreshLfo();
+        break;
     }
 }
 
@@ -181,8 +208,10 @@ void Engine::noteOn(const Event& e) noexcept
         slot = &*quietest;
         slot->reset();
     }
+    if (patch_.lfo2.keySync) // LFO 2 "retrigger": the global wobble restarts with each new note
+        lfo2_.restart(0, static_cast<std::uint32_t>(noteCounter_ + 1));
     const synth::NoteContext ctx{.key = e.key, .velocity = std::clamp(e.value, 0.0f, 1.0f), .bend = bend_};
-    slot->start(ctx, patch_, ++noteCounter_, e.noteId);
+    slot->start(ctx, patch_, ++noteCounter_, e.noteId, lfo1Reference_.phase());
 }
 
 void Engine::noteOff(const Event& e) noexcept
@@ -225,7 +254,26 @@ void Engine::render(float* outL, float* outR, int from, int to) noexcept
     for (int i = from; i < to; ++i) {
         if (liveSettling_)
             settleMatrix();
-        const synth::VoiceControl ctl{.alg = &live_, .cutoffOctaves = cutoffOctaves_.tick(), .q = q_.tick()};
+        // Global modulation, computed once per sample for all voices (L1.11).
+        (void)lfo1Reference_.tick();
+        lfo2_.setShape(patch_.lfo2.shape);
+        const float lfo2 = lfo2_.tick();
+        const synth::ModRoutes& routes = patch_.routes;
+        const synth::Algorithm* alg = &live_;
+        if (routes.lfo2IndexAmount != 0.0f) {
+            // LFO 2 → FM index: scale every modulation amount (feedback too). It's global, so one scaled
+            // copy of the 16-entry matrix serves every voice. Never below 0 (that would invert the phase).
+            const float k = std::max(0.0f, 1.0f + lfo2 * routes.lfo2IndexAmount);
+            indexScaled_ = live_;
+            for (auto& row : indexScaled_.mod)
+                for (float& m : row)
+                    m *= k;
+            alg = &indexScaled_;
+        }
+        const synth::VoiceControl ctl{.alg = alg,
+                                      .cutoffOctaves = cutoffOctaves_.tick() + lfo2 * routes.lfo2CutoffOctaves,
+                                      .q = q_.tick(),
+                                      .modWheel = modWheel_.tick()};
         float sum = 0.0f;
         for (synth::Voice& v : voices_)
             if (v.busy())

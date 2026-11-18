@@ -17,6 +17,8 @@ struct Event {
         PitchBend,   // value = −1..1 (× the patch's bend range)
         AllNotesOff, // release everything (panic / transport stop)
         ParamChange, // paramId, value = new PLAIN value (units of the param table, L2.4)
+        Controller,  // key = MIDI CC number, value = 0..1 (L1.11): performance controllers such as the mod
+                     // wheel (CC 1). CCs mapped to *parameters* are translated by the host (param table).
     };
 
     Type type = Type::NoteOn;
@@ -37,6 +39,10 @@ struct Event {
         return {Type::NoteOff, frame, id, key, 0, 0.0f};
     }
     static constexpr Event pitchBend(std::uint32_t frame, float bend) { return {Type::PitchBend, frame, -1, 0, 0, bend}; }
+    static constexpr Event controller(std::uint32_t frame, std::uint8_t cc, float value01)
+    {
+        return {Type::Controller, frame, -1, cc, 0, value01};
+    }
     static constexpr Event paramChange(std::uint32_t frame, std::uint32_t id, float plainValue)
     {
         return {Type::ParamChange, frame, -1, 0, 0, plainValue, id};

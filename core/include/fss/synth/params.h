@@ -45,6 +45,8 @@ enum class ParamTarget : std::uint8_t {
     FilterQ,      // resonance: smoothed per sample in the Engine
     Filter,       // mode, env amount, key track, velocity: voices read them every sample, nothing to do
     FilterEnv,    // filter envelope times/sustain: envelopes updated (like OpEnv)
+    LfoRate,      // an LFO's rate: the Engine re-tunes its LFOs and every voice's LFO 1 (L1.11)
+    Lfo,          // shapes, depths, delay/fade, sync: read every sample or at the next note, nothing to do
 };
 
 enum class OpField : std::uint8_t { // APPEND ONLY: values are part of the stable parameter ids
@@ -67,11 +69,15 @@ struct ParamInfo {
 };
 
 namespace param_id {
-// Globals are numbered in groups of ten so related ids stay together: 1-9 global, 10-19 filter (L1.10).
+// Globals are numbered in groups of ten so related ids stay together: 1-9 global, 10-19 filter (L1.10),
+// 30-39 LFO 1 + vibrato, 40-49 LFO 2 (L1.11).
 inline constexpr std::uint32_t kAlgorithm = 1, kOutputDb = 2, kTuningA4 = 3, kBendRange = 4;
 inline constexpr std::uint32_t kFilterMode = 10, kCutoff = 11, kResonance = 12, kFilterEnvAmount = 13,
                                kKeyTrack = 14, kFilterVel = 15, kFilterAttack = 16, kFilterDecay = 17,
                                kFilterSustain = 18, kFilterRelease = 19;
+inline constexpr std::uint32_t kLfo1Rate = 30, kLfo1Shape = 31, kLfo1Delay = 32, kLfo1Fade = 33, kLfo1KeySync = 34,
+                               kVibrato = 35, kWheelVibrato = 36;
+inline constexpr std::uint32_t kLfo2Rate = 40, kLfo2Shape = 41, kLfo2Retrigger = 42, kLfo2Cutoff = 43, kLfo2Index = 44;
 constexpr std::uint32_t op(int opIndex, OpField f) { return 1000u + 100u * static_cast<std::uint32_t>(opIndex) + static_cast<std::uint32_t>(f); }
 } // namespace param_id
 
@@ -103,13 +109,10 @@ inline constexpr OpFieldInfo kOpFields[kNumOpFields] = {
     {OpField::Feedback, "Feedback", "", 0.0f, 4.0f, 0.0f, Skew::Linear, 10.0f, ParamTarget::Feedback},
 };
 
-// MIDI CC defaults for operators. (Until L1.10, CC 74 and CC 71 drove op A / op C levels; they now drive
-// the filter, which is what General MIDI 2 assigns them to: 74 = brightness/cutoff, 71 = resonance.)
-constexpr std::uint8_t defaultCC(int op, OpField f)
-{
-    if (f == OpField::Feedback && op == 0) return 1; // mod wheel → op A feedback
-    return 0;
-}
+// MIDI CC defaults for operators: none since L1.11. (Until L1.10, CC 74 and CC 71 drove op A / op C levels;
+// they now drive the filter, General MIDI 2's meaning. Until L1.11, CC 1, the mod wheel, drove op A
+// feedback; it is now a performance controller the Engine receives directly, for vibrato.)
+constexpr std::uint8_t defaultCC(int /*op*/, OpField /*f*/) { return 0; }
 
 // Global parameters in display order. Each row: id, name, unit, min, max, default, skew, smoothing ms,
 // MIDI CC, target, op (−1), field (unused), group. Defaults equal Patch{} (tested).
@@ -131,6 +134,21 @@ inline constexpr ParamInfo kGlobalParams[] = {
     {param_id::kFilterDecay, "F decay", "ms", 1.0f, 30000.0f, 400.0f, Skew::Exp, 0.0f, 0, ParamTarget::FilterEnv, -1, {}, "Filter"},
     {param_id::kFilterSustain, "F sustain", "", 0.0f, 1.0f, 0.0f, Skew::Linear, 0.0f, 0, ParamTarget::FilterEnv, -1, {}, "Filter"},
     {param_id::kFilterRelease, "F release", "ms", 1.0f, 30000.0f, 300.0f, Skew::Exp, 0.0f, 0, ParamTarget::FilterEnv, -1, {}, "Filter"},
+    // ---- LFO 1: per voice, drives vibrato (L1.11) ----
+    // Shapes: 0 sine, 1 triangle, 2 saw up, 3 saw down, 4 square, 5 sample & hold, 6 smooth random.
+    {param_id::kLfo1Rate, "LFO1 rate", "Hz", 0.05f, 20.0f, 5.0f, Skew::Exp, 0.0f, 0, ParamTarget::LfoRate, -1, {}, "LFO 1 (vibrato)"},
+    {param_id::kLfo1Shape, "LFO1 shape", "", 0.0f, 6.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Lfo, -1, {}, "LFO 1 (vibrato)"},
+    {param_id::kLfo1Delay, "LFO1 delay", "ms", 0.0f, 5000.0f, 0.0f, Skew::Power2, 0.0f, 0, ParamTarget::Lfo, -1, {}, "LFO 1 (vibrato)"},
+    {param_id::kLfo1Fade, "LFO1 fade", "ms", 0.0f, 5000.0f, 0.0f, Skew::Power2, 0.0f, 0, ParamTarget::Lfo, -1, {}, "LFO 1 (vibrato)"},
+    {param_id::kLfo1KeySync, "LFO1 key sync", "on/off", 0.0f, 1.0f, 1.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Lfo, -1, {}, "LFO 1 (vibrato)"},
+    {param_id::kVibrato, "Vibrato", "st", 0.0f, 12.0f, 0.0f, Skew::Power2, 0.0f, 0, ParamTarget::Lfo, -1, {}, "LFO 1 (vibrato)"},
+    {param_id::kWheelVibrato, "Wheel > vib", "st", 0.0f, 2.0f, 0.5f, Skew::Power2, 0.0f, 0, ParamTarget::Lfo, -1, {}, "LFO 1 (vibrato)"},
+    // ---- LFO 2: global (one for all voices), drives cutoff and FM index ----
+    {param_id::kLfo2Rate, "LFO2 rate", "Hz", 0.05f, 20.0f, 2.0f, Skew::Exp, 0.0f, 0, ParamTarget::LfoRate, -1, {}, "LFO 2 (filter, index)"},
+    {param_id::kLfo2Shape, "LFO2 shape", "", 0.0f, 6.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Lfo, -1, {}, "LFO 2 (filter, index)"},
+    {param_id::kLfo2Retrigger, "LFO2 retrig", "on/off", 0.0f, 1.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Lfo, -1, {}, "LFO 2 (filter, index)"},
+    {param_id::kLfo2Cutoff, "LFO2 > cutoff", "oct", 0.0f, 6.0f, 0.0f, Skew::Power2, 0.0f, 0, ParamTarget::Lfo, -1, {}, "LFO 2 (filter, index)"},
+    {param_id::kLfo2Index, "LFO2 > index", "", 0.0f, 1.0f, 0.0f, Skew::Linear, 0.0f, 0, ParamTarget::Lfo, -1, {}, "LFO 2 (filter, index)"},
 };
 inline constexpr std::size_t kNumGlobalParams = std::size(kGlobalParams);
 

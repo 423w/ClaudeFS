@@ -89,7 +89,11 @@ inline bool toEvent(const DecodedMidi& m, std::uint32_t frame, Event& out) noexc
             out = Event{Event::Type::AllNotesOff, frame};
             return true;
         }
-        return false;
+        // Every other CC goes to the Engine as a Controller event (L1.11); it reacts to the ones it knows
+        // (CC 1 mod wheel; CC 64 sustain from L2.5) and ignores the rest.
+        out = Event::controller(frame, m.number, static_cast<float>(m.value) / 127.0f);
+        out.channel = m.channel;
+        return true;
     default:
         return false;
     }

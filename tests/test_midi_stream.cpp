@@ -75,6 +75,11 @@ TEST_CASE("toEvent: notes, velocity-0, bend and panic map to Engine events", "[m
     REQUIRE(toEvent(classify({0xB0, 123, 0, 0}), 0, e));
     CHECK(e.type == Event::Type::AllNotesOff);
 
-    CHECK_FALSE(toEvent(classify({0xB0, 74, 64, 0}), 0, e)); // ordinary CC: not until L2.4
+    // Since L1.11 every other CC becomes a Controller event (the Engine uses CC 1, and CC 64 from L2.5).
+    REQUIRE(toEvent(classify({0xB1, 1, 127, 0}), 5, e));
+    CHECK(e.type == fss::Event::Type::Controller);
+    CHECK(e.key == 1);
+    CHECK(e.value == 1.0f);
+    CHECK(e.frame == 5);
     CHECK_FALSE(toEvent(classify({0xF8, 0, 0, 0}), 0, e));   // system
 }

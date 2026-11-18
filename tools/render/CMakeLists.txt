@@ -28,6 +28,7 @@ add_executable(fss_render
     l1_8.cpp
     l1_9.cpp
     l1_10.cpp
+    l1_11.cpp
     l2_4.cpp
     engine_render.cpp)
 target_link_libraries(fss_render PRIVATE fss::core fss::wav fss::score fss::warnings)

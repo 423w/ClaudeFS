@@ -80,7 +80,9 @@ public:
         key_ = note.key;
         velocity_ = note.velocity;
         bend_ = note.bend;
+        pitchOffset_ = 0.0f;
         for (int i = 0; i < kNumOps; ++i) {
+            ops_[static_cast<std::size_t>(i)].setPitchRatio(1.0); // no leftover modulation from the slot's last note
             const OperatorParams& p = patch.ops[static_cast<std::size_t>(i)];
             Operator& o = ops_[static_cast<std::size_t>(i)];
             o.setFrequency(operatorFrequencyHz(patch, p, note.key, note.bend));
@@ -107,6 +109,18 @@ public:
         for (int i = 0; i < kNumOps; ++i)
             ops_[static_cast<std::size_t>(i)].setFrequency(
                 operatorFrequencyHz(*patch_, patch_->ops[static_cast<std::size_t>(i)], key_, bend_));
+        applyPitchRatio(); // "fixed" may have changed: fixed-frequency operators ignore pitch modulation
+    }
+
+    /// Per-sample pitch modulation of the whole note, in semitones (vibrato, glide). Fixed-frequency
+    /// operators ignore it, as they ignore the key and the bend. Cheap when nothing changes: the exp2 and the
+    /// four increment updates only run when the offset actually moved.
+    void setPitchOffset(float semitones) noexcept
+    {
+        if (semitones == pitchOffset_)
+            return;
+        pitchOffset_ = semitones;
+        applyPitchRatio();
     }
     /// Level, velocity sensitivity, key level: the new level is a *target*, reached by the operator's smoother.
     void refreshLevels() noexcept
@@ -127,6 +141,7 @@ public:
     }
 
     [[nodiscard]] std::uint8_t key() const noexcept { return key_; }
+    [[nodiscard]] float velocity() const noexcept { return velocity_; }
 
     void prepare(double sampleRate, float levelSmoothingMs = 5.0f) noexcept
     {
@@ -193,7 +208,17 @@ public:
     }
 
 private:
+    void applyPitchRatio() noexcept
+    {
+        if (!patch_)
+            return;
+        const double r = std::exp2(static_cast<double>(pitchOffset_) / 12.0);
+        for (std::size_t i = 0; i < kNumOps; ++i)
+            ops_[i].setPitchRatio(patch_->ops[i].fixed ? 1.0 : r);
+    }
+
     const Patch* patch_ = nullptr; // set by start(); read again by the refresh functions
+    float pitchOffset_ = 0.0f;     // semitones, from setPitchOffset()
     std::uint8_t key_ = 0;
     float velocity_ = 1.0f, bend_ = 0.0f;
     std::array<Operator, kNumOps> ops_{};

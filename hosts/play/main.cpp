@@ -287,7 +287,23 @@ void drawMain(synth::Patch& patch, PlayHost& host, const standalone::DeviceInfo&
             static constexpr const char* kModeNames[] = {"Off", "Low-pass", "Band-pass", "High-pass", "Notch"};
             ImGui::TextDisabled("  %s", kModeNames[static_cast<std::size_t>(patch.filter.mode)]);
         }
+        if (p.id == synth::param_id::kLfo1Shape || p.id == synth::param_id::kLfo2Shape) {
+            static constexpr const char* kShapeNames[] = {"Sine", "Triangle", "Saw up", "Saw down",
+                                                          "Square", "Sample & hold", "Smooth random"};
+            const auto shape = p.id == synth::param_id::kLfo1Shape ? patch.lfo1.shape : patch.lfo2.shape;
+            ImGui::TextDisabled("  %s", kShapeNames[static_cast<std::size_t>(shape)]);
+        }
     }
+
+    // Performance controllers: not patch parameters (not saved with a preset), so they're Controller events,
+    // exactly what a MIDI controller sends. These widgets stand in for hardware you may not have plugged in.
+    ImGui::SeparatorText("Performance");
+    static float wheel = 0.0f;
+    ImGui::Text("Mod wheel");
+    ImGui::SameLine(ImGui::GetFontSize() * 6.5f);
+    ImGui::SetNextItemWidth(-1);
+    if (ImGui::SliderFloat("##wheel", &wheel, 0.0f, 1.0f, "%.2f"))
+        host.post(Event::controller(0, 1, wheel));
 
     ImGui::Separator();
     const float peakDb = util::gainToDb(host.peak());

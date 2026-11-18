@@ -28,6 +28,10 @@ synth::Patch testPatch()
     // L1.10: a resonant filter with envelope, key tracking and velocity, so invariance covers it too.
     p.filter = {.mode = synth::FilterMode::LowPass, .cutoffHz = 800.0f, .q = 4.0f, .envOctaves = 3.0f, .keyTrack = 0.5f,
                 .velOctaves = 1.0f, .env = {.attackMs = 3.0f, .decayMs = 200.0f, .sustain = 0.2f, .releaseMs = 150.0f}};
+    // L1.11: every LFO route on, with delay/fade, free-running LFO 1 and S&H on LFO 2.
+    p.lfo1 = {.rateHz = 5.5f, .shape = dsp::LfoShape::Triangle, .delayMs = 30.0f, .fadeMs = 50.0f, .keySync = false};
+    p.lfo2 = {.rateHz = 3.0f, .shape = dsp::LfoShape::SampleHold, .keySync = true};
+    p.routes = {.vibratoSemitones = 0.3f, .wheelVibratoSemitones = 0.5f, .lfo2CutoffOctaves = 1.5f, .lfo2IndexAmount = 0.4f};
     p.outputGain = 0.3f;
     return p;
 }
@@ -53,6 +57,8 @@ std::vector<TimedEvent> randomScore(std::uint32_t seed, std::uint64_t length)
     }
     for (int i = 0; i < 10; ++i)
         ev.push_back({when(rng), Event::pitchBend(0, bend(rng))});
+    for (int i = 0; i < 10; ++i) // L1.11: mod wheel moves
+        ev.push_back({when(rng), Event::controller(0, 1, 0.5f + 0.5f * bend(rng))});
     std::stable_sort(ev.begin(), ev.end(), [](const TimedEvent& a, const TimedEvent& b) { return a.at < b.at; });
     return ev;
 }

@@ -14,6 +14,8 @@
 // costs neither a click (no instant cut) nor latency (the new note isn't delayed until the fade ends).
 #pragma once
 
+#include <fss/dsp/lfo.h>
+#include <fss/dsp/phasor.h>
 #include <fss/dsp/smoother.h>
 #include <fss/event.h>
 #include <fss/synth/patch.h>
@@ -61,6 +63,7 @@ private:
     void noteOff(const Event& e) noexcept;
     void render(float* outL, float* outR, int from, int to) noexcept;
     void settleMatrix() noexcept;
+    void restartLfos() noexcept;
     [[nodiscard]] synth::Voice* findFreeVoice() noexcept;
     [[nodiscard]] synth::Voice* chooseVictim() noexcept;
 
@@ -71,6 +74,10 @@ private:
     float matrixK_ = 1.0f;          // one-pole coefficient for the matrix glide
     dsp::OnePoleSmoother gain_{};   // output gain, smoothed per sample
     dsp::OnePoleSmoother cutoffOctaves_{}, q_{}; // filter base cutoff (log2 Hz) and resonance, smoothed (L1.10)
+    dsp::Lfo lfo2_;                 // the global LFO (L1.11)
+    dsp::Phasor lfo1Reference_;     // shared phase for voices whose LFO 1 isn't key-synced
+    dsp::OnePoleSmoother modWheel_{};
+    synth::Algorithm indexScaled_{}; // live_ with every modulation amount scaled by LFO 2 (when routed)
     bool smoothing_ = true;
     int polyphony_ = kMaxPolyphony;
     float bend_ = 0.0f;

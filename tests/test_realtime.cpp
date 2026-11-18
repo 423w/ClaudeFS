@@ -63,7 +63,7 @@ TEST_CASE("Engine::process never allocates or frees, under heavy random playing"
     std::vector<Event> events;
     events.reserve(64);        // the *test* must not allocate inside the loop either (it's not guarded, but tidy)
     std::mt19937 rng(99);
-    std::uniform_int_distribution<int> key(30, 100), kind(0, 11), frame(0, 511);
+    std::uniform_int_distribution<int> key(30, 100), kind(0, 12), frame(0, 511);
     std::uniform_real_distribution<float> val(-1.0f, 1.0f);
 
     util::resetRealtimeViolations();
@@ -78,6 +78,7 @@ TEST_CASE("Engine::process never allocates or frees, under heavy random playing"
             case 7: events.push_back(Event::pitchBend(f, val(rng))); break;
             case 8: events.push_back(Event::noteOn(f, k, 0.0f)); break; // velocity 0 = note-off
             case 9: events.push_back({Event::Type::AllNotesOff, f}); break;
+            case 10: events.push_back(Event::controller(f, 1, 0.5f + 0.5f * val(rng))); break; // mod wheel (L1.11)
             default: { // L2.4: live parameter changes of every kind (levels, algorithm, envelopes, ratios...)
                 const auto& p = synth::kParams[static_cast<std::size_t>(k) % synth::kParams.size()];
                 events.push_back(Event::paramChange(f, p.id, synth::fromNormalized(p, 0.5f + 0.5f * val(rng))));

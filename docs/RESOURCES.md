@@ -52,6 +52,7 @@ get a few things, get those.
 | `[STILSON-BLIT]` | **Stilson & Smith: "Alias-Free Digital Synthesis of Classic Analog Waveforms"** (ICMC 1996). Free on CCRMA | The BLIT approach, and the historical root of band-limited oscillators. L1.8 |
 | `[BLEP-SNDKIT]` | **Paul Batchelor: sndkit "blep"**, paulbatchelor.github.io/sndkit/blep. Free | A tiny, readable PolyBLEP implementation write-up. L1.8 |
 | `[ESQUEDA16]` | **Esqueda, Välimäki & Bilbao: "Rounding Corners with BLAMP"** (DAFx-16). Free | The band-limited *ramp*: PolyBLEP's integral, for slope corners (triangle, clipped and rectified waveforms). L1.8 (CFS's triangle) |
+| `[MARSAGLIA-XORSHIFT]` | **George Marsaglia: "Xorshift RNGs"** (Journal of Statistical Software, 2003). Free | The three-shift random generator CFS uses on the audio thread (S&H LFOs, later noise). L1.11 |
 | `[PARKER-ADAA]` | **Parker, Zavalishin & Le Bivic: "Reducing the Aliasing of Nonlinear Waveshaping Using Continuous-Time Convolution"** (DAFx-16). Free | Antiderivative antialiasing (ADAA). L4.5, L5.2 |
 | `[WAKEFIELD-GEN]` | **Wakefield & Taylor: *Generating Sound & Organizing Time: Thinking with gen~*, Book 1** (Cycling '74, 2022) 💰 | Teaches *per-sample thinking* beautifully. The patches are Max/gen~, but the ideas map directly to C++ |
 | `[AUDIO-PROG-BOOK]` | **Boulanger & Lazzarini (eds.): *The Audio Programming Book*** (MIT Press, 2010) 💰 | C-based, from WAV files up to oscillators and filters. Good for Branch 1's "from scratch" spirit |

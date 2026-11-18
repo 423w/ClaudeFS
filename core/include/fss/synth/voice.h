@@ -1,10 +1,12 @@
 // fss/synth/voice.h: one slot in the Engine's voice pool: an FmVoice, the voice's filter (L1.10), plus
 // the bookkeeping the allocator needs (key, age, released?, being stolen?) and a short "steal fade" (L1.7, D8).
 //
+//   LFO 1 (vibrato) ─► pitch
 //   FmVoice (4 operators) ──► Svf (mode, cutoff from base + filter env + key + velocity) ──► steal fade ──►
 #pragma once
 
 #include <fss/dsp/adsr.h>
+#include <fss/dsp/lfo.h>
 #include <fss/dsp/svf.h>
 #include <fss/synth/fm_voice.h>
 
@@ -17,9 +19,10 @@ namespace fss::synth {
 /// matrix and the smoothed global filter controls. Computing them per voice would multiply the smoothing
 /// cost by 20, and they'd still have to agree across voices.
 struct VoiceControl {
-    const Algorithm* alg = nullptr;
-    float cutoffOctaves = 0.0f; // log2(base cutoff in Hz), smoothed
+    const Algorithm* alg = nullptr; // live matrix (L2.4), scaled by LFO 2 when it modulates the index (L1.11)
+    float cutoffOctaves = 0.0f; // log2(base cutoff in Hz), smoothed, plus LFO 2's cutoff route
     float q = 0.7071f;          // resonance, smoothed
+    float modWheel = 0.0f;      // 0..1, smoothed (L1.11)
 };
 
 // FilterMode is Off followed by the SvfMode values in the same order (tick() relies on it).
@@ -33,6 +36,7 @@ public:
         fm_.prepare(sampleRate, levelSmoothingMs);
         filterEnv_.prepare(sampleRate);
         svf_.prepare(sampleRate);
+        lfo1_.prepare(sampleRate);
         // Linear fade length; at least 1 sample so a "0 ms" fade is an instant cut, not a divide by zero.
         fadeStep_ = 1.0f / std::max(1.0f, stealFadeMs * 0.001f * static_cast<float>(sampleRate));
         reset();
@@ -48,7 +52,10 @@ public:
         noteId_ = -1;
     }
 
-    void start(const NoteContext& note, const Patch& patch, std::uint64_t age, std::int32_t noteId) noexcept
+    /// lfo1Phase: where a free-running (not key-synced) LFO 1 starts: the Engine's shared reference phase,
+    /// so all free voices move together like one LFO.
+    void start(const NoteContext& note, const Patch& patch, std::uint64_t age, std::int32_t noteId,
+               dsp::Phase lfo1Phase = 0) noexcept
     {
         patch_ = &patch;
         fm_.start(note, patch);
@@ -58,6 +65,10 @@ public:
         filterEnv_.setParams(patch.filter.env);
         filterEnv_.noteOn();
         svf_.reset(); // a fresh note starts with empty "capacitors": no leftover ringing from the slot's last note
+        lfo1_.setRate(patch.lfo1.rateHz);
+        lfo1_.setDelayFade(patch.lfo1.delayMs, patch.lfo1.fadeMs);
+        // Seed from the note counter: deterministic (renders reproduce), different per note (S&H voices differ).
+        lfo1_.restart(patch.lfo1.keySync ? 0u : lfo1Phase, static_cast<std::uint32_t>(age * 2654435761u));
         busy_ = true;
         released_ = fading_ = false;
         fadeGain_ = 1.0f;
@@ -85,6 +96,11 @@ public:
     void setBend(float bend) noexcept { fm_.setBend(bend); }
     void refreshFrequencies() noexcept { fm_.refreshFrequencies(); }
     void refreshLevels() noexcept { fm_.refreshLevels(); }
+    void refreshLfo() noexcept
+    {
+        if (patch_)
+            lfo1_.setRate(patch_->lfo1.rateHz);
+    }
     void refreshEnvelopes() noexcept
     {
         fm_.refreshEnvelopes();
@@ -95,6 +111,13 @@ public:
     /// One sample. `ctl` carries the Engine's live (smoothed) matrix (L2.4) and filter controls (L1.10).
     [[nodiscard]] float tick(const VoiceControl& ctl) noexcept
     {
+        // Vibrato (L1.11): depth in semitones, so it sounds the same on every note. The patch's depth waits
+        // for LFO 1's delay/fade; the mod wheel's is immediate (the player asked for it now).
+        lfo1_.setShape(patch_->lfo1.shape);
+        const float lfo1 = lfo1_.tick();
+        const ModRoutes& r = patch_->routes;
+        fm_.setPitchOffset(lfo1 * (r.vibratoSemitones * lfo1_.fadeGain() + ctl.modWheel * r.wheelVibratoSemitones));
+
         float y = fm_.tick(*ctl.alg);
         const float env = filterEnv_.tick(); // always runs, so switching the filter on mid-note finds it in place
         if (const FilterParams& f = patch_->filter; f.mode != FilterMode::Off) {
@@ -131,6 +154,7 @@ private:
     FmVoice fm_;
     dsp::Adsr filterEnv_;
     dsp::Svf svf_;
+    dsp::Lfo lfo1_;
     float velocity_ = 1.0f;
     const Patch* patch_ = nullptr;
     bool busy_ = false, released_ = false, fading_ = false;

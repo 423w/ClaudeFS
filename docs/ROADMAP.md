@@ -184,7 +184,7 @@ Modes (tell Claude which one you want):
 - [x] L1.8 Waveforms & aliasing
 - [x] L1.9 Filters I
 - [x] L1.10 Filters II
-- [ ] L1.11 LFOs & basic modulation
+- [x] L1.11 LFOs & basic modulation
 
 ### Branch 2: Real-Time
 - [x] L2.1 Audio callbacks & latency

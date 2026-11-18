@@ -25,6 +25,18 @@ float getParam(const Patch& patch, const ParamInfo& p) noexcept
         case param_id::kFilterDecay: return f.env.decayMs;
         case param_id::kFilterSustain: return f.env.sustain;
         case param_id::kFilterRelease: return f.env.releaseMs;
+        case param_id::kLfo1Rate: return patch.lfo1.rateHz;
+        case param_id::kLfo1Shape: return static_cast<float>(patch.lfo1.shape);
+        case param_id::kLfo1Delay: return patch.lfo1.delayMs;
+        case param_id::kLfo1Fade: return patch.lfo1.fadeMs;
+        case param_id::kLfo1KeySync: return patch.lfo1.keySync ? 1.0f : 0.0f;
+        case param_id::kVibrato: return patch.routes.vibratoSemitones;
+        case param_id::kWheelVibrato: return patch.routes.wheelVibratoSemitones;
+        case param_id::kLfo2Rate: return patch.lfo2.rateHz;
+        case param_id::kLfo2Shape: return static_cast<float>(patch.lfo2.shape);
+        case param_id::kLfo2Retrigger: return patch.lfo2.keySync ? 1.0f : 0.0f;
+        case param_id::kLfo2Cutoff: return patch.routes.lfo2CutoffOctaves;
+        case param_id::kLfo2Index: return patch.routes.lfo2IndexAmount;
         default: return p.def;
         }
     }
@@ -76,6 +88,18 @@ void setParam(Patch& patch, const ParamInfo& p, float plain) noexcept
         case param_id::kFilterDecay: f.env.decayMs = v; return;
         case param_id::kFilterSustain: f.env.sustain = v; return;
         case param_id::kFilterRelease: f.env.releaseMs = v; return;
+        case param_id::kLfo1Rate: patch.lfo1.rateHz = v; return;
+        case param_id::kLfo1Shape: patch.lfo1.shape = static_cast<dsp::LfoShape>(static_cast<int>(v)); return;
+        case param_id::kLfo1Delay: patch.lfo1.delayMs = v; return;
+        case param_id::kLfo1Fade: patch.lfo1.fadeMs = v; return;
+        case param_id::kLfo1KeySync: patch.lfo1.keySync = v >= 0.5f; return;
+        case param_id::kVibrato: patch.routes.vibratoSemitones = v; return;
+        case param_id::kWheelVibrato: patch.routes.wheelVibratoSemitones = v; return;
+        case param_id::kLfo2Rate: patch.lfo2.rateHz = v; return;
+        case param_id::kLfo2Shape: patch.lfo2.shape = static_cast<dsp::LfoShape>(static_cast<int>(v)); return;
+        case param_id::kLfo2Retrigger: patch.lfo2.keySync = v >= 0.5f; return;
+        case param_id::kLfo2Cutoff: patch.routes.lfo2CutoffOctaves = v; return;
+        case param_id::kLfo2Index: patch.routes.lfo2IndexAmount = v; return;
         default: return;
         }
     }

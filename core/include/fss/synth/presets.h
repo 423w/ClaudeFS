@@ -56,6 +56,44 @@ inline Patch resoPluck()
     return p;
 }
 
+/// Wobble bass (L1.11): the FM bass through a resonant low-pass that the global LFO 2 sweeps ±2.5 octaves
+/// at 3 Hz (triangle, restarted on each note so every note wobbles the same way).
+inline Patch wobbleBass()
+{
+    Patch p = fmBass();
+    p.ops[2].level = 3.0f; // brighter source: the filter needs harmonics to sweep through
+    p.ops[2].env.sustain = 0.6f;
+    p.filter = {.mode = FilterMode::LowPass, .cutoffHz = 400.0f, .q = 6.0f, .keyTrack = 0.5f,
+                .env = {.attackMs = 1.0f, .decayMs = 300.0f, .sustain = 0.0f, .releaseMs = 200.0f}};
+    p.lfo2 = {.rateHz = 3.0f, .shape = dsp::LfoShape::Triangle, .keySync = true};
+    p.routes.lfo2CutoffOctaves = 2.5f;
+    p.outputGain = 0.3f;
+    return p;
+}
+
+/// Evolving FM pad (L1.11): two slow stacks (algorithm 5) whose brightness drifts with a slow smooth-random
+/// LFO 2 on the FM index, plus a gentle free-running vibrato that fades in.
+inline Patch evolvingPad()
+{
+    using util::Ratio;
+    Patch p;
+    p.algorithm = kAlgorithms[4];
+    p.algorithmNumber = 5;
+    p.ops[0] = {.ratio = Ratio{2.0}, .detune = util::Cents{4.0}, .level = 1.4f,
+                .env = {.attackMs = 900.0f, .decayMs = 3000.0f, .sustain = 0.7f, .releaseMs = 1500.0f}};
+    p.ops[1] = {.level = 0.5f, .env = {.attackMs = 600.0f, .decayMs = 2000.0f, .sustain = 0.9f, .releaseMs = 1800.0f}};
+    p.ops[2] = {.ratio = Ratio{3.0}, .detune = util::Cents{-5.0}, .level = 1.0f,
+                .env = {.attackMs = 1500.0f, .decayMs = 4000.0f, .sustain = 0.6f, .releaseMs = 1500.0f}};
+    p.ops[3] = {.ratio = Ratio{1.0}, .detune = util::Cents{3.0}, .level = 0.5f,
+                .env = {.attackMs = 800.0f, .decayMs = 3000.0f, .sustain = 0.9f, .releaseMs = 2000.0f}};
+    p.filter = {.mode = FilterMode::LowPass, .cutoffHz = 3500.0f, .q = 0.9f, .keyTrack = 0.3f};
+    p.lfo1 = {.rateHz = 4.8f, .shape = dsp::LfoShape::Sine, .delayMs = 400.0f, .fadeMs = 1200.0f, .keySync = false};
+    p.lfo2 = {.rateHz = 0.2f, .shape = dsp::LfoShape::SmoothRandom, .keySync = false};
+    p.routes = {.vibratoSemitones = 0.12f, .wheelVibratoSemitones = 0.5f, .lfo2CutoffOctaves = 0.7f, .lfo2IndexAmount = 0.8f};
+    p.outputGain = 0.25f;
+    return p;
+}
+
 /// The factory list hosts show as buttons (fss_play). A real preset system with files is L3.4.
 struct NamedPreset {
     const char* name;
@@ -65,6 +103,8 @@ inline constexpr NamedPreset kFactoryPresets[] = {
     {"E-piano", epiano},
     {"FM bass", fmBass},
     {"Reso pluck", resoPluck},
+    {"Wobble bass", wobbleBass},
+    {"FM pad", evolvingPad},
     {"Init", [] { return Patch{}; }},
 };
 
