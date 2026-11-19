@@ -203,7 +203,7 @@ Modes (tell Claude which one you want):
 - [ ] L3.6 GUI II: FFT & analyzer
 
 ### Branch 4: Sound Design Depth
-- [ ] L4.1 Mod matrix
+- [x] L4.1 Mod matrix (L1.11 routes = fixed slots, golden test; CLAP poly-mod on cutoff/resonance; FL check: docs/FL-STUDIO.md section 7)
 - [ ] L4.2 Richer operators
 - [ ] L4.3 Wavetables
 - [ ] L4.4 Unison & stereo

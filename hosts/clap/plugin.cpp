@@ -396,7 +396,19 @@ void FssClap::translate(const clap_event_header* h, std::uint32_t frame, std::ui
                    frame);
         return;
     }
-    case CLAP_EVENT_PARAM_MOD: ++stats_.paramMod; return; // no parameter is declared modulatable (until L4.1)
+    case CLAP_EVENT_PARAM_MOD: { // L4.1: polyphonic modulation (cutoff, resonance), an offset in host units
+        ++stats_.paramMod;
+        const auto* ev = reinterpret_cast<const clap_event_param_mod*>(h);
+        const int index = indexFromEvent(ev->param_id, ev->cookie);
+        if (index < 0 || !synth::kParams[static_cast<std::size_t>(index)].polyMod)
+            return;
+        // CLAP addresses a note by note id, or by key (+ channel), or neither (= every note). CFS voices don't
+        // track the channel, so a key matches that key on any channel.
+        const std::uint8_t key = (ev->key >= 0 && ev->key <= 127) ? static_cast<std::uint8_t>(ev->key) : Event::kAnyKey;
+        add(Event::paramMod(frame, synth::kParams[static_cast<std::size_t>(index)].id, static_cast<float>(ev->amount),
+                            ev->note_id >= 0 ? ev->note_id : -1, ev->note_id >= 0 ? Event::kAnyKey : key));
+        return;
+    }
     case CLAP_EVENT_NOTE_EXPRESSION: ++stats_.noteExpression; return; // per-note expression: later
     case CLAP_EVENT_TRANSPORT: { // L5.3: a sample-accurate tempo change inside the block
         ++stats_.transport;

@@ -21,6 +21,7 @@ void renderL2_4(const std::filesystem::path& outDir); // l2_4.cpp: parameter smo
 void renderL2_5(const std::filesystem::path& outDir); // l2_5.cpp: legato/mono/poly, glide, sustain pedal, bend
 void renderL2_6(const std::filesystem::path& outDir); // l2_6.cpp: CPU per voice, hot spots, denormals (console)
 void renderL3_4(const std::filesystem::path& outDir); // l3_4.cpp: factory bank files + a render of every preset
+void renderL4_1(const std::filesystem::path& outDir); // l4_1.cpp: mod matrix pads, host poly-mod
 void renderL5_1(const std::filesystem::path& outDir); // l5_1.cpp: FX slot switching (clicks), D16 dispatch timing
 void renderL5_3(const std::filesystem::path& outDir); // l5_3.cpp: delay line, synced delay, time changes, spill
 void renderL5_4(const std::filesystem::path& outDir); // l5_4.cpp: chorus e-piano, flanger vs phaser, interpolation

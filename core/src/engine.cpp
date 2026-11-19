@@ -42,9 +42,26 @@ void Engine::prepare(double sampleRate, int maxBlockSize, float stealFadeMs)
     reset();
 }
 
+void Engine::rebuildRouting() noexcept
+{
+    // The matrix's slot list, in evaluation order (L4.1). First L1.11's four routes as fixed slots, exactly
+    // the arithmetic they had (mod_matrix.h explains why it's bit-identical), then the eight user slots.
+    using synth::ModDst;
+    using synth::ModSrc;
+    routing_ = {};
+    const synth::ModRoutes& r = patch_.routes;
+    routing_.add(ModSrc::Lfo1, ModSrc::Lfo1Fade, ModDst::Pitch, r.vibratoSemitones);   // "Vibrato"
+    routing_.add(ModSrc::Lfo1, ModSrc::ModWheel, ModDst::Pitch, r.wheelVibratoSemitones); // "Wheel > vib"
+    routing_.add(ModSrc::Lfo2, ModSrc::None, ModDst::Cutoff, r.lfo2CutoffOctaves);     // "LFO2 > cutoff"
+    routing_.add(ModSrc::Lfo2, ModSrc::None, ModDst::Index, r.lfo2IndexAmount);        // "LFO2 > index"
+    for (const synth::ModSlotParams& s : patch_.mod.slots)
+        routing_.add(s.src, s.via, s.dst, s.amountPct * 0.01f * synth::kModDests[synth::idx(s.dst)].range);
+}
+
 void Engine::setPatch(const synth::Patch& patch) noexcept
 {
     patch_ = patch;
+    rebuildRouting();
     live_ = patch.algorithm;
     liveSettling_ = false;
     fx_.setParams(patch.fx);
@@ -82,6 +99,8 @@ void Engine::reset() noexcept
     sustainPedal_ = false;
     monoVoice_ = nullptr;
     hasLastPitch_ = false;
+    hostGlobal_.fill(0.0f);
+    rebuildRouting();
     restartLfos();
 }
 
@@ -162,6 +181,9 @@ void Engine::handle(const Event& e) noexcept
     case Event::Type::Controller:
         controller(e);
         break;
+    case Event::Type::ParamMod:
+        paramMod(e);
+        break;
     case Event::Type::Tempo:
         if (e.value > 0.0f && std::isfinite(e.value)) { // a broken transport must not set a 0 or NaN tempo
             tempoBpm_ = e.value;
@@ -221,6 +243,7 @@ void Engine::paramChange(const Event& e) noexcept
         break;
     case synth::ParamTarget::OpEnv:
     case synth::ParamTarget::FilterEnv:
+    case synth::ParamTarget::ModEnv:
         for (synth::Voice& v : voices_)
             if (v.busy())
                 v.refreshEnvelopes();
@@ -243,8 +266,13 @@ void Engine::paramChange(const Event& e) noexcept
     case synth::ParamTarget::FilterQ:
         q_.setTarget(patch_.filter.q);
         break;
-    case synth::ParamTarget::Filter:
     case synth::ParamTarget::Lfo:
+        rebuildRouting(); // the four L1.11 route depths are LFO parameters, and fixed matrix slots (L4.1)
+        break;
+    case synth::ParamTarget::ModMatrix:
+        rebuildRouting();
+        break;
+    case synth::ParamTarget::Filter:
         break; // voices and render() read these from the patch every sample (or at the next note)
     case synth::ParamTarget::VoiceMode:
         // Switching poly ↔ mono mid-performance: release what's sounding and start clean, rather than
@@ -262,6 +290,26 @@ void Engine::paramChange(const Event& e) noexcept
                 v.refreshLfo();
         break;
     }
+}
+
+void Engine::paramMod(const Event& e) noexcept
+{
+    // CLAP polyphonic modulation (L4.1). The host's offset is in our host units: the knob position 0..1 (L3.2
+    // convention). For an Exp-skewed parameter one knob unit is log2(max/min) octaves, so the offset maps
+    // exactly onto a matrix destination in octaves: the cutoff (20 Hz..20 kHz: 9.97 oct per unit) and the
+    // resonance (Q 0.5..25: 5.64 oct per unit).
+    const synth::ParamInfo* p = synth::findParam(e.paramId);
+    if (!p || !p->polyMod)
+        return;
+    const synth::ModDst dst = p->id == synth::param_id::kCutoff ? synth::ModDst::Cutoff : synth::ModDst::Resonance;
+    const float offset = (std::isfinite(e.value) ? e.value : 0.0f) * std::log2(p->max / p->min);
+    if (e.noteId < 0 && e.key == Event::kAnyKey) { // no note named: every voice, now and later
+        hostGlobal_[synth::idx(dst)] = offset;
+        return;
+    }
+    for (synth::Voice& v : voices_)
+        if (v.busy() && (e.noteId >= 0 ? v.noteId() == e.noteId : v.key() == e.key))
+            v.setHostMod(dst, offset);
 }
 
 void Engine::noteOn(const Event& e) noexcept
@@ -414,16 +462,24 @@ void Engine::render(float* outL, float* outR, int from, int to) noexcept
     for (int i = from; i < to; ++i) {
         if (liveSettling_)
             settleMatrix();
-        // Global modulation, computed once per sample for all voices (L1.11).
+        // Global modulation, computed once per sample for all voices (L1.11; through the matrix since L4.1):
+        // the global sources, then the slots whose source and via are both global.
         (void)lfo1Reference_.tick();
         lfo2_.setShape(patch_.lfo2.shape);
         const float lfo2 = lfo2_.tick();
-        const synth::ModRoutes& routes = patch_.routes;
+        const float wheel = modWheel_.tick();
+        const float bend = bendSmoothed_.tick();
+        globalSrc_ = synth::kNoModSources;
+        globalSrc_[synth::idx(synth::ModSrc::Lfo2)] = lfo2;
+        globalSrc_[synth::idx(synth::ModSrc::ModWheel)] = wheel;
+        globalSrc_[synth::idx(synth::ModSrc::PitchBend)] = bend;
+        globalSums_ = hostGlobal_; // the host's all-notes modulation (0 unless it sends PARAM_MOD)
+        synth::accumulate(routing_.global.data(), routing_.numGlobal, globalSrc_, globalSums_);
         const synth::Algorithm* alg = &live_;
-        if (routes.lfo2IndexAmount != 0.0f) {
-            // LFO 2 → FM index: scale every modulation amount (feedback too). It's global, so one scaled
-            // copy of the 16-entry matrix serves every voice. Never below 0 (that would invert the phase).
-            const float k = std::max(0.0f, 1.0f + lfo2 * routes.lfo2IndexAmount);
+        if (const float gi = globalSums_[synth::idx(synth::ModDst::Index)]; gi != 0.0f) {
+            // Index modulation from a global source (L1.11's LFO 2 → index): scale every modulation amount
+            // (feedback too) once, for every voice. Never below 0 (that would invert the phase).
+            const float k = std::max(0.0f, 1.0f + gi);
             indexScaled_ = live_;
             for (auto& row : indexScaled_.mod)
                 for (float& m : row)
@@ -431,10 +487,14 @@ void Engine::render(float* outL, float* outR, int from, int to) noexcept
             alg = &indexScaled_;
         }
         const synth::VoiceControl ctl{.alg = alg,
-                                      .cutoffOctaves = cutoffOctaves_.tick() + lfo2 * routes.lfo2CutoffOctaves,
+                                      .cutoffOctaves = cutoffOctaves_.tick() + globalSums_[synth::idx(synth::ModDst::Cutoff)],
                                       .q = q_.tick(),
-                                      .modWheel = modWheel_.tick(),
-                                      .bendSemitones = bendSmoothed_.tick() * static_cast<float>(patch_.bendRange.value)};
+                                      .modWheel = wheel,
+                                      .bendSemitones = bend * static_cast<float>(patch_.bendRange.value),
+                                      .liveAlg = &live_,
+                                      .sources = &globalSrc_,
+                                      .global = &globalSums_,
+                                      .routing = &routing_};
         float sum = 0.0f;
         for (synth::Voice& v : voices_)
             if (v.busy())

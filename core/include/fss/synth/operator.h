@@ -74,6 +74,9 @@ public:
     /// Output amplitude (carrier) or peak modulation index in radians (modulator). See header.
     /// Jumps immediately: for note starts, when the envelope is at zero anyway.
     void setLevel(float level) noexcept { level_.reset(level); }
+    /// A per-sample level multiplier from the mod matrix (L4.1, "Op X level"); 1 = unmodulated. Applied after
+    /// the smoothed level, so (level · 1) · env · sine is bit-identical to the unmodulated product.
+    void setLevelMod(float m) noexcept { levelMod_ = m; }
     /// Glides to the new level (one-pole, see prepare): for live knob changes while a note sounds (L2.4).
     void setLevelSmoothed(float level) noexcept { level_.setTarget(level); }
 
@@ -90,7 +93,7 @@ public:
     [[nodiscard]] float tick(float pmRadians = 0.0f) noexcept
     {
         const dsp::Phase p = phasor_.tick() + radiansToPhase(pmRadians); // unsigned add: wraps for free
-        return level_.tick() * env_.tick() * dsp::sineTable(p);
+        return level_.tick() * levelMod_ * env_.tick() * dsp::sineTable(p);
     }
 
     [[nodiscard]] bool isActive() const noexcept { return env_.isActive(); }
@@ -101,6 +104,7 @@ private:
     double baseHz_ = 0.0, pitchRatio_ = 1.0;
     dsp::Adsr env_;
     dsp::OnePoleSmoother level_{};
+    float levelMod_ = 1.0f;
 };
 
 } // namespace fss::synth

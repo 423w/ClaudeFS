@@ -8,9 +8,30 @@
 
 namespace fss::synth {
 
+namespace {
+/// Mod matrix slot ids (L4.1): 300 + 10·slot + field. Returns false for any other id.
+bool modSlotOf(std::uint32_t id, std::size_t& slot, std::uint32_t& field) noexcept
+{
+    if (id < 300u || id >= 300u + 10u * static_cast<std::uint32_t>(kNumModSlots) || id % 10u > 3u)
+        return false;
+    slot = (id - 300u) / 10u;
+    field = id % 10u;
+    return true;
+}
+} // namespace
+
 float getParam(const Patch& patch, const ParamInfo& p) noexcept
 {
-    if (p.op < 0) {
+    if (std::size_t slot = 0; p.op < 0) {
+        if (std::uint32_t field = 0; modSlotOf(p.id, slot, field)) {
+            const ModSlotParams& m = patch.mod.slots[slot];
+            switch (field) {
+            case 0: return static_cast<float>(m.src);
+            case 1: return static_cast<float>(m.via);
+            case 2: return static_cast<float>(m.dst);
+            default: return m.amountPct;
+            }
+        }
         const FilterParams& f = patch.filter;
         switch (p.id) {
         case param_id::kAlgorithm: return static_cast<float>(patch.algorithmNumber);
@@ -43,6 +64,10 @@ float getParam(const Patch& patch, const ParamInfo& p) noexcept
         case param_id::kGlide: return patch.voice.glideMs;
         case param_id::kGlideLegato: return patch.voice.glideLegatoOnly ? 1.0f : 0.0f;
         case param_id::kPriority: return static_cast<float>(patch.voice.priority);
+        case param_id::kModEnvAttack: return patch.mod.env.attackMs;
+        case param_id::kModEnvDecay: return patch.mod.env.decayMs;
+        case param_id::kModEnvSustain: return patch.mod.env.sustain;
+        case param_id::kModEnvRelease: return patch.mod.env.releaseMs;
         case param_id::kWidthOn: return patch.fx.width.enabled ? 1.0f : 0.0f;
         case param_id::kChorusOn: return patch.fx.chorus.enabled ? 1.0f : 0.0f;
         case param_id::kChorusRate: return patch.fx.chorus.rateHz;
@@ -99,7 +124,16 @@ float getParam(const Patch& patch, const ParamInfo& p) noexcept
 void setParam(Patch& patch, const ParamInfo& p, float plain) noexcept
 {
     const float v = clampToRange(p, plain);
-    if (p.op < 0) {
+    if (std::size_t slot = 0; p.op < 0) {
+        if (std::uint32_t field = 0; modSlotOf(p.id, slot, field)) {
+            ModSlotParams& m = patch.mod.slots[slot];
+            switch (field) {
+            case 0: m.src = static_cast<ModSrc>(static_cast<int>(v)); return;
+            case 1: m.via = static_cast<ModSrc>(static_cast<int>(v)); return;
+            case 2: m.dst = static_cast<ModDst>(static_cast<int>(v)); return;
+            default: m.amountPct = v; return;
+            }
+        }
         FilterParams& f = patch.filter;
         switch (p.id) {
         case param_id::kAlgorithm: {
@@ -140,6 +174,10 @@ void setParam(Patch& patch, const ParamInfo& p, float plain) noexcept
         case param_id::kGlide: patch.voice.glideMs = v; return;
         case param_id::kGlideLegato: patch.voice.glideLegatoOnly = v >= 0.5f; return;
         case param_id::kPriority: patch.voice.priority = static_cast<NotePriority>(static_cast<int>(v)); return;
+        case param_id::kModEnvAttack: patch.mod.env.attackMs = v; return;
+        case param_id::kModEnvDecay: patch.mod.env.decayMs = v; return;
+        case param_id::kModEnvSustain: patch.mod.env.sustain = v; return;
+        case param_id::kModEnvRelease: patch.mod.env.releaseMs = v; return;
         case param_id::kWidthOn: patch.fx.width.enabled = v >= 0.5f; return;
         case param_id::kChorusOn: patch.fx.chorus.enabled = v >= 0.5f; return;
         case param_id::kChorusRate: patch.fx.chorus.rateHz = v; return;
@@ -200,6 +238,13 @@ std::string_view valueLabel(const ParamInfo& p, int value) noexcept
     };
     if (p.skew != Skew::Stepped)
         return {};
+    if (std::size_t slot = 0; p.op < 0) {
+        if (std::uint32_t field = 0; modSlotOf(p.id, slot, field) && field <= 2) {
+            if (field == 2)
+                return value >= 0 && value < kNumModDests ? kModDests[static_cast<std::size_t>(value)].name : std::string_view{};
+            return value >= 0 && value < kNumModSources ? kModSources[static_cast<std::size_t>(value)].name : std::string_view{};
+        }
+    }
     switch (p.id) {
     case param_id::kAlgorithm:
         return value >= 1 && value <= static_cast<int>(kAlgorithms.size())

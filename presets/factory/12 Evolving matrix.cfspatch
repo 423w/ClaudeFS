@@ -1,0 +1,187 @@
+CFS patch 1
+# CFS (Claude's FirstStreetSynthesis) patch. One "<parameter id> = <value>" per line, values in
+# the units shown in the comments. Ids are permanent (core/include/fss/synth/params.h); a file that
+# leaves an id out gets that parameter's default. Text after '#' is a comment.
+name = Evolving matrix
+
+# Global
+1 = 5               # Algorithm (5 two stacks: A>B*, C>D*)
+2 = -12.041201      # Output [dB]
+3 = 440             # Tuning A4 [Hz]
+4 = 2               # Bend range [st]
+
+# Filter
+10 = 1              # Filter [mode] (Low-pass)
+11 = 3500           # Cutoff [Hz]
+12 = 0.9            # Resonance [Q]
+13 = 0              # Env amount [oct]
+14 = 0.3            # Key track
+15 = 0              # Vel > cutoff [oct]
+16 = 1              # F attack [ms]
+17 = 400            # F decay [ms]
+18 = 0              # F sustain
+19 = 300            # F release [ms]
+
+# LFO 1 (vibrato)
+30 = 0.3            # LFO1 rate [Hz]
+31 = 0              # LFO1 shape (Sine)
+32 = 0              # LFO1 delay [ms]
+33 = 0              # LFO1 fade [ms]
+34 = 0              # LFO1 key sync (Off)
+35 = 0              # Vibrato [st]
+36 = 0.5            # Wheel > vib [st]
+
+# LFO 2 (filter, index)
+40 = 0.13           # LFO2 rate [Hz]
+41 = 1              # LFO2 shape (Triangle)
+42 = 0              # LFO2 retrig (Off)
+43 = 0              # LFO2 > cutoff [oct]
+44 = 0              # LFO2 > index
+
+# Voice
+50 = 0              # Voice mode (Poly)
+51 = 0              # Glide [ms]
+52 = 1              # Glide legato (On)
+53 = 0              # Priority (Last)
+
+# Mod env
+70 = 3000           # Mod env attack [ms]
+71 = 6000           # Mod env decay [ms]
+72 = 0.4            # Mod env sustain
+73 = 2500           # Mod env release [ms]
+
+# Chorus
+220 = 0             # Chorus on (Off)
+221 = 0.6           # Chorus rate [Hz]
+222 = 3             # Chorus depth [ms]
+223 = 10            # Chorus delay [ms]
+224 = 2             # Chorus voices
+225 = 50            # Chorus mix [%]
+
+# Flanger
+230 = 0             # Flanger on (Off)
+231 = 0.2           # Flanger rate [Hz]
+232 = 0.5           # Flanger delay [ms]
+233 = 3             # Flanger depth [ms]
+234 = 50            # Flanger feedback [%]
+235 = 50            # Flanger mix [%]
+
+# Phaser
+240 = 0             # Phaser on (Off)
+241 = 0.3           # Phaser rate [Hz]
+242 = 800           # Phaser center [Hz]
+243 = 2             # Phaser depth [oct]
+244 = 40            # Phaser feedback [%]
+245 = 6             # Phaser stages
+246 = 50            # Phaser mix [%]
+
+# Delay
+210 = 0             # Delay on (Off)
+212 = 1             # Delay sync (On)
+213 = 6             # Delay note (1/8 D)
+211 = 375           # Delay time [ms]
+214 = 35            # Delay feedback [%]
+216 = 6000          # Delay damping [Hz]
+215 = 1             # Delay ping-pong (On)
+218 = 0             # Delay glide (Clean)
+217 = 25            # Delay mix [%]
+
+# Width
+200 = 0             # Width on (Off)
+201 = 100           # Width [%]
+
+# Mod matrix
+300 = 4             # Mod1 source (Mod env)
+301 = 0             # Mod1 via (None)
+302 = 4             # Mod1 dest (FM index)
+303 = 60            # Mod1 amount [%]
+310 = 1             # Mod2 source (LFO 1)
+311 = 0             # Mod2 via (None)
+312 = 11            # Mod2 dest (Op A pitch)
+313 = 1             # Mod2 amount [%]
+320 = 10            # Mod3 source (Random)
+321 = 0             # Mod3 via (None)
+322 = 2             # Mod3 dest (Cutoff)
+323 = 20            # Mod3 amount [%]
+330 = 3             # Mod4 source (LFO 2)
+331 = 0             # Mod4 via (None)
+332 = 5             # Mod4 dest (Amp)
+333 = 8             # Mod4 amount [%]
+340 = 7             # Mod5 source (Key)
+341 = 4             # Mod5 via (Mod env)
+342 = 9             # Mod5 dest (Op C level)
+343 = -40           # Mod5 amount [%]
+350 = 0             # Mod6 source (None)
+351 = 0             # Mod6 via (None)
+352 = 0             # Mod6 dest (None)
+353 = 0             # Mod6 amount [%]
+360 = 0             # Mod7 source (None)
+361 = 0             # Mod7 via (None)
+362 = 0             # Mod7 dest (None)
+363 = 0             # Mod7 amount [%]
+370 = 0             # Mod8 source (None)
+371 = 0             # Mod8 via (None)
+372 = 0             # Mod8 dest (None)
+373 = 0             # Mod8 amount [%]
+
+# Operator A
+1000 = 2            # Ratio [x]
+1001 = 4            # Detune [cents]
+1002 = 0            # Fixed freq (Off)
+1003 = 440          # Fixed Hz [Hz]
+1004 = 1.4          # Level
+1005 = 0            # Vel sens
+1006 = 0            # Key level [dB/oct]
+1007 = 0            # Key rate
+1008 = 900          # Attack [ms]
+1009 = 3000         # Decay [ms]
+1010 = 0.7          # Sustain
+1011 = 1500         # Release [ms]
+1012 = 0            # Feedback
+
+# Operator B
+1100 = 1            # Ratio [x]
+1101 = 0            # Detune [cents]
+1102 = 0            # Fixed freq (Off)
+1103 = 440          # Fixed Hz [Hz]
+1104 = 0.5          # Level
+1105 = 0            # Vel sens
+1106 = 0            # Key level [dB/oct]
+1107 = 0            # Key rate
+1108 = 600          # Attack [ms]
+1109 = 2000         # Decay [ms]
+1110 = 0.9          # Sustain
+1111 = 1800         # Release [ms]
+1112 = 0            # Feedback
+
+# Operator C
+1200 = 3            # Ratio [x]
+1201 = -5           # Detune [cents]
+1202 = 0            # Fixed freq (Off)
+1203 = 440          # Fixed Hz [Hz]
+1204 = 1            # Level
+1205 = 0            # Vel sens
+1206 = 0            # Key level [dB/oct]
+1207 = 0            # Key rate
+1208 = 1500         # Attack [ms]
+1209 = 4000         # Decay [ms]
+1210 = 0.6          # Sustain
+1211 = 1500         # Release [ms]
+1212 = 0            # Feedback
+
+# Operator D
+1300 = 1            # Ratio [x]
+1301 = 3            # Detune [cents]
+1302 = 0            # Fixed freq (Off)
+1303 = 440          # Fixed Hz [Hz]
+1304 = 0.5          # Level
+1305 = 0            # Vel sens
+1306 = 0            # Key level [dB/oct]
+1307 = 0            # Key rate
+1308 = 800          # Attack [ms]
+1309 = 3000         # Decay [ms]
+1310 = 0.9          # Sustain
+1311 = 2000         # Release [ms]
+1312 = 0            # Feedback
+
+end

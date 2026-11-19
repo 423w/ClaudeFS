@@ -8,6 +8,7 @@
 // an id; add new parameters with new ids (append new OpField values at the END of the enum). Array order
 // is free to change (it's only display order).
 //   globals:             1..99, then FX 200..299 (L5.1)
+//   mod matrix slots:    300 + 10·slot + field  (slot 0..7, field 0 source, 1 via, 2 destination, 3 amount; L4.1)
 //   operator parameters: 1000 + 100·op + field   (op 0..3 = A..D)
 //
 // VALUES are always *plain* (the unit shown in `unit`: Hz, ms, dB...). The normalized 0..1 form, which is
@@ -53,6 +54,8 @@ enum class ParamTarget : std::uint8_t {
     VoiceMode,    // poly/mono/legato: the Engine releases what's sounding and starts clean (L2.5)
     Play,         // glide, glide mode, note priority: read at the next note event, nothing to do
     Fx,           // an FX-chain setting (L5.1): the chain gets new targets (switches fade, values glide)
+    ModMatrix,    // a matrix slot (L4.1): the Engine recompiles its routing (the LFO routes do too)
+    ModEnv,       // the mod envelope's times/sustain (L4.1): envelopes updated (like FilterEnv)
 };
 
 enum class OpField : std::uint8_t { // APPEND ONLY: values are part of the stable parameter ids
@@ -72,13 +75,14 @@ struct ParamInfo {
     std::int8_t op;          // operator index 0..3, or −1 for globals
     OpField field;           // meaningful when op ≥ 0
     std::string_view group = "Global"; // GUI section (and later the plugin's parameter "module")
+    bool polyMod = false;    // L4.1: the host may modulate it per note (CLAP PARAM_MOD with a note id)
 };
 
 namespace param_id {
 // Globals are numbered in groups of ten so related ids stay together: 1-9 global, 10-19 filter (L1.10),
 // 30-39 LFO 1 + vibrato, 40-49 LFO 2 (L1.11), 50-59 voice / playing (L2.5).
 // FX (L5.1) get a hundred of their own, ten per effect: 200-209 width, 210-219 delay (L5.3),
-// 220-229 chorus, 230-239 flanger, 240-249 phaser (L5.4).
+// 220-229 chorus, 230-239 flanger, 240-249 phaser (L5.4). 70-79 mod envelope (L4.1).
 inline constexpr std::uint32_t kAlgorithm = 1, kOutputDb = 2, kTuningA4 = 3, kBendRange = 4;
 inline constexpr std::uint32_t kFilterMode = 10, kCutoff = 11, kResonance = 12, kFilterEnvAmount = 13,
                                kKeyTrack = 14, kFilterVel = 15, kFilterAttack = 16, kFilterDecay = 17,
@@ -97,6 +101,9 @@ inline constexpr std::uint32_t kFlangerOn = 230, kFlangerRate = 231, kFlangerDel
                                kFlangerFeedback = 234, kFlangerMix = 235;
 inline constexpr std::uint32_t kPhaserOn = 240, kPhaserRate = 241, kPhaserCenter = 242, kPhaserDepth = 243,
                                kPhaserFeedback = 244, kPhaserStages = 245, kPhaserMix = 246;
+inline constexpr std::uint32_t kModEnvAttack = 70, kModEnvDecay = 71, kModEnvSustain = 72, kModEnvRelease = 73;
+enum class ModField : std::uint8_t { Source, Via, Dest, Amount }; // APPEND ONLY (part of the ids)
+constexpr std::uint32_t modSlot(int slot, ModField f) { return 300u + 10u * static_cast<std::uint32_t>(slot) + static_cast<std::uint32_t>(f); }
 constexpr std::uint32_t op(int opIndex, OpField f) { return 1000u + 100u * static_cast<std::uint32_t>(opIndex) + static_cast<std::uint32_t>(f); }
 } // namespace param_id
 
@@ -144,8 +151,8 @@ inline constexpr ParamInfo kGlobalParams[] = {
     // Mode: 0 Off, 1 Low-pass, 2 Band-pass, 3 High-pass, 4 Notch (FilterMode).
     {param_id::kFilterMode, "Filter", "mode", 0.0f, 4.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Filter, -1, {}, "Filter"},
     // Cutoff smoothed over 10 ms *in octaves* (Engine), so a CC sweep glides evenly across the range.
-    {param_id::kCutoff, "Cutoff", "Hz", 20.0f, 20000.0f, 2000.0f, Skew::Exp, 10.0f, 74, ParamTarget::FilterCutoff, -1, {}, "Filter"},
-    {param_id::kResonance, "Resonance", "Q", 0.5f, 25.0f, 0.7071f, Skew::Exp, 10.0f, 71, ParamTarget::FilterQ, -1, {}, "Filter"},
+    {param_id::kCutoff, "Cutoff", "Hz", 20.0f, 20000.0f, 2000.0f, Skew::Exp, 10.0f, 74, ParamTarget::FilterCutoff, -1, {}, "Filter", true},
+    {param_id::kResonance, "Resonance", "Q", 0.5f, 25.0f, 0.7071f, Skew::Exp, 10.0f, 71, ParamTarget::FilterQ, -1, {}, "Filter", true},
     {param_id::kFilterEnvAmount, "Env amount", "oct", -8.0f, 8.0f, 0.0f, Skew::Linear, 0.0f, 0, ParamTarget::Filter, -1, {}, "Filter"},
     {param_id::kKeyTrack, "Key track", "", 0.0f, 1.0f, 0.0f, Skew::Linear, 0.0f, 0, ParamTarget::Filter, -1, {}, "Filter"},
     {param_id::kFilterVel, "Vel > cutoff", "oct", 0.0f, 6.0f, 0.0f, Skew::Linear, 0.0f, 0, ParamTarget::Filter, -1, {}, "Filter"},
@@ -174,6 +181,11 @@ inline constexpr ParamInfo kGlobalParams[] = {
     {param_id::kGlide, "Glide", "ms", 0.0f, 2000.0f, 0.0f, Skew::Power2, 0.0f, 5, ParamTarget::Play, -1, {}, "Voice"},
     {param_id::kGlideLegato, "Glide legato", "on/off", 0.0f, 1.0f, 1.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Play, -1, {}, "Voice"},
     {param_id::kPriority, "Priority", "", 0.0f, 2.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Play, -1, {}, "Voice"},
+    // ---- mod envelope (L4.1): a fourth ADSR that only modulates (a matrix source) ----
+    {param_id::kModEnvAttack, "Mod env attack", "ms", 1.0f, 10000.0f, 1.0f, Skew::Exp, 0.0f, 0, ParamTarget::ModEnv, -1, {}, "Mod env"},
+    {param_id::kModEnvDecay, "Mod env decay", "ms", 1.0f, 30000.0f, 500.0f, Skew::Exp, 0.0f, 0, ParamTarget::ModEnv, -1, {}, "Mod env"},
+    {param_id::kModEnvSustain, "Mod env sustain", "", 0.0f, 1.0f, 0.0f, Skew::Linear, 0.0f, 0, ParamTarget::ModEnv, -1, {}, "Mod env"},
+    {param_id::kModEnvRelease, "Mod env release", "ms", 1.0f, 30000.0f, 300.0f, Skew::Exp, 0.0f, 0, ParamTarget::ModEnv, -1, {}, "Mod env"},
     // ---- FX chain (L5.1). Smoothing happens inside the effects, so smoothingMs is 0 here. ----
     // Table order = chain order (the editor's FX page draws the groups left to right in this order).
     // Chorus, flanger, phaser (L5.4): the modulation effects, before the delay so every echo carries them.
@@ -212,12 +224,30 @@ inline constexpr ParamInfo kGlobalParams[] = {
 };
 inline constexpr std::size_t kNumGlobalParams = std::size(kGlobalParams);
 
+// Mod matrix slot names (L4.1): "Mod1 source" ... "Mod8 amount". Literals, because ParamInfo holds views.
+inline constexpr std::string_view kModSlotNames[kNumModSlots][4] = {
+    {"Mod1 source", "Mod1 via", "Mod1 dest", "Mod1 amount"}, {"Mod2 source", "Mod2 via", "Mod2 dest", "Mod2 amount"},
+    {"Mod3 source", "Mod3 via", "Mod3 dest", "Mod3 amount"}, {"Mod4 source", "Mod4 via", "Mod4 dest", "Mod4 amount"},
+    {"Mod5 source", "Mod5 via", "Mod5 dest", "Mod5 amount"}, {"Mod6 source", "Mod6 via", "Mod6 dest", "Mod6 amount"},
+    {"Mod7 source", "Mod7 via", "Mod7 dest", "Mod7 amount"}, {"Mod8 source", "Mod8 via", "Mod8 dest", "Mod8 amount"},
+};
+inline constexpr std::size_t kNumModSlotParams = static_cast<std::size_t>(kNumModSlots) * 4;
+
 constexpr auto makeTable()
 {
-    std::array<ParamInfo, kNumGlobalParams + kNumOps * kNumOpFields> t{};
+    std::array<ParamInfo, kNumGlobalParams + kNumOps * kNumOpFields + kNumModSlotParams> t{};
     std::size_t i = 0;
     for (const ParamInfo& g : kGlobalParams)
         t[i++] = g;
+    // Matrix slots (L4.1): source and via list kModSources, destination kModDests; amount in % of the range.
+    for (int s = 0; s < kNumModSlots; ++s) {
+        const auto& n = kModSlotNames[s];
+        const auto src = static_cast<float>(kNumModSources - 1), dst = static_cast<float>(kNumModDests - 1);
+        t[i++] = {param_id::modSlot(s, param_id::ModField::Source), n[0], "", 0.0f, src, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::ModMatrix, -1, {}, "Mod matrix"};
+        t[i++] = {param_id::modSlot(s, param_id::ModField::Via), n[1], "", 0.0f, src, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::ModMatrix, -1, {}, "Mod matrix"};
+        t[i++] = {param_id::modSlot(s, param_id::ModField::Dest), n[2], "", 0.0f, dst, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::ModMatrix, -1, {}, "Mod matrix"};
+        t[i++] = {param_id::modSlot(s, param_id::ModField::Amount), n[3], "%", -100.0f, 100.0f, 0.0f, Skew::Linear, 0.0f, 0, ParamTarget::ModMatrix, -1, {}, "Mod matrix"};
+    }
     for (int op = 0; op < kNumOps; ++op)
         for (const OpFieldInfo& f : kOpFields)
             t[i++] = {param_id::op(op, f.field), f.name, f.unit, f.min, f.max, f.def, f.skew, f.smoothingMs,

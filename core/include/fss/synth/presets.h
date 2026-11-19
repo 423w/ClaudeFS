@@ -203,6 +203,28 @@ inline Patch epianoChorus()
     return p;
 }
 
+/// Evolving matrix (L4.1): the FM pad's operators with five matrix routes, so every note moves on its own:
+///   1. Mod env (3 s rise, slow fall)  → FM index  +60 %   the tone opens over seconds, then settles
+///   2. LFO 1 (free, 0.3 Hz)           → Op A pitch +1 %   op A drifts ±0.24 st: a slow beating shimmer
+///   3. Random (per note)              → Cutoff     +20 %  each note a different brightness (±1.6 oct)
+///   4. LFO 2 (0.13 Hz triangle)       → Amp        +8 %   a slow ±1.9 dB swell across the whole chord
+///   5. Key × Mod env                  → Op C level −40 %  high notes lose op C's bite as the envelope rises
+/// The L1.11 routes are off (their matrix slots are free for anything).
+inline Patch evolvingMatrix()
+{
+    Patch p = evolvingPad();
+    p.routes = {.vibratoSemitones = 0.0f, .wheelVibratoSemitones = 0.5f, .lfo2CutoffOctaves = 0.0f, .lfo2IndexAmount = 0.0f};
+    p.lfo1 = {.rateHz = 0.3f, .shape = dsp::LfoShape::Sine, .keySync = false};
+    p.lfo2 = {.rateHz = 0.13f, .shape = dsp::LfoShape::Triangle, .keySync = false};
+    p.mod.env = {.attackMs = 3000.0f, .decayMs = 6000.0f, .sustain = 0.4f, .releaseMs = 2500.0f};
+    p.mod.slots[0] = {.src = ModSrc::ModEnv, .dst = ModDst::Index, .amountPct = 60.0f};
+    p.mod.slots[1] = {.src = ModSrc::Lfo1, .dst = ModDst::OpAPitch, .amountPct = 1.0f};
+    p.mod.slots[2] = {.src = ModSrc::Random, .dst = ModDst::Cutoff, .amountPct = 20.0f};
+    p.mod.slots[3] = {.src = ModSrc::Lfo2, .dst = ModDst::Amp, .amountPct = 8.0f};
+    p.mod.slots[4] = {.src = ModSrc::Key, .via = ModSrc::ModEnv, .dst = ModDst::OpCLevel, .amountPct = -40.0f};
+    return p;
+}
+
 /// The factory list hosts show (fss_play, the plugin editor). Since L3.4 the factory bank also exists as
 /// text files in presets/factory/ (written from these functions by `fss_render l3.4`; a test checks that
 /// the files and these functions agree), so the files are what users read, copy and edit.
@@ -222,6 +244,7 @@ inline constexpr NamedPreset kFactoryPresets[] = {
     {"Organ", organ},
     {"Marimba", marimba},
     {"E-piano chorus", epianoChorus}, // L5.4. Append only: the list position is the file number ("11 ...")
+    {"Evolving matrix", evolvingMatrix}, // L4.1
     {"Init", [] { return Patch{}; }},
 };
 

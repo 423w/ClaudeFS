@@ -19,6 +19,7 @@
 #include <fss/synth/algorithm.h>
 #include <fss/synth/operator.h>
 #include <fss/synth/patch.h>
+#include <fss/util/inline.h>
 #include <fss/util/math.h>
 
 #include <algorithm>
@@ -81,7 +82,9 @@ public:
         velocity_ = note.velocity;
         bend_ = note.bend;
         pitchOffset_ = 0.0f;
+        opPitch_.fill(0.0f);
         for (int i = 0; i < kNumOps; ++i) {
+            ops_[static_cast<std::size_t>(i)].setLevelMod(1.0f);
             ops_[static_cast<std::size_t>(i)].setPitchRatio(1.0); // no leftover modulation from the slot's last note
             const OperatorParams& p = patch.ops[static_cast<std::size_t>(i)];
             Operator& o = ops_[static_cast<std::size_t>(i)];
@@ -122,6 +125,18 @@ public:
         pitchOffset_ = semitones;
         applyPitchRatio();
     }
+
+    /// Mod matrix (L4.1): one operator's own pitch offset (semitones, on top of the voice's) and level
+    /// multiplier. Cheap when nothing changes: the ratio is only recomputed when the offset moves.
+    void setOpPitch(int i, float semitones) noexcept
+    {
+        float& o = opPitch_[static_cast<std::size_t>(i)];
+        if (semitones == o)
+            return;
+        o = semitones;
+        applyPitchRatio();
+    }
+    void setOpLevelMod(int i, float m) noexcept { ops_[static_cast<std::size_t>(i)].setLevelMod(m); }
     /// Level, velocity sensitivity, key level: the new level is a *target*, reached by the operator's smoother.
     void refreshLevels() noexcept
     {
@@ -181,7 +196,7 @@ public:
     }
 
     /// One sample of the voice under algorithm `alg`.
-    [[nodiscard]] float tick(const Algorithm& alg) noexcept
+    [[nodiscard]] FSS_FORCEINLINE float tick(const Algorithm& alg) noexcept // inlined: see util/inline.h
     {
         for (int dst = 0; dst < kNumOps; ++dst) {
             float pm = 0.0f;
@@ -221,12 +236,17 @@ private:
         if (!patch_)
             return;
         const double r = util::pow2(static_cast<double>(pitchOffset_) / 12.0); // per sample: the fast exp (L2.6)
-        for (std::size_t i = 0; i < kNumOps; ++i)
-            ops_[i].setPitchRatio(patch_->ops[i].fixed ? 1.0 : r);
+        for (std::size_t i = 0; i < kNumOps; ++i) {
+            // An operator's own matrix pitch (L4.1) multiplies in only when it's set: r · 1 would be exact too,
+            // but skipping the pow2 keeps the unmodulated cost where it was.
+            const double own = opPitch_[i] != 0.0f ? util::pow2(static_cast<double>(opPitch_[i]) / 12.0) : 1.0;
+            ops_[i].setPitchRatio(patch_->ops[i].fixed ? 1.0 : (opPitch_[i] != 0.0f ? r * own : r));
+        }
     }
 
     const Patch* patch_ = nullptr; // set by start(); read again by the refresh functions
     float pitchOffset_ = 0.0f;     // semitones, from setPitchOffset()
+    std::array<float, kNumOps> opPitch_{}; // per-operator semitones from the mod matrix (L4.1)
     std::uint8_t key_ = 0;
     float velocity_ = 1.0f, bend_ = 0.0f;
     std::array<Operator, kNumOps> ops_{};

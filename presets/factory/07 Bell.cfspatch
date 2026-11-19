@@ -44,6 +44,12 @@ name = Bell
 52 = 1              # Glide legato (On)
 53 = 0              # Priority (Last)
 
+# Mod env
+70 = 1              # Mod env attack [ms]
+71 = 500            # Mod env decay [ms]
+72 = 0              # Mod env sustain
+73 = 300            # Mod env release [ms]
+
 # Chorus
 220 = 0             # Chorus on (Off)
 221 = 0.6           # Chorus rate [Hz]
@@ -83,6 +89,40 @@ name = Bell
 # Width
 200 = 0             # Width on (Off)
 201 = 100           # Width [%]
+
+# Mod matrix
+300 = 0             # Mod1 source (None)
+301 = 0             # Mod1 via (None)
+302 = 0             # Mod1 dest (None)
+303 = 0             # Mod1 amount [%]
+310 = 0             # Mod2 source (None)
+311 = 0             # Mod2 via (None)
+312 = 0             # Mod2 dest (None)
+313 = 0             # Mod2 amount [%]
+320 = 0             # Mod3 source (None)
+321 = 0             # Mod3 via (None)
+322 = 0             # Mod3 dest (None)
+323 = 0             # Mod3 amount [%]
+330 = 0             # Mod4 source (None)
+331 = 0             # Mod4 via (None)
+332 = 0             # Mod4 dest (None)
+333 = 0             # Mod4 amount [%]
+340 = 0             # Mod5 source (None)
+341 = 0             # Mod5 via (None)
+342 = 0             # Mod5 dest (None)
+343 = 0             # Mod5 amount [%]
+350 = 0             # Mod6 source (None)
+351 = 0             # Mod6 via (None)
+352 = 0             # Mod6 dest (None)
+353 = 0             # Mod6 amount [%]
+360 = 0             # Mod7 source (None)
+361 = 0             # Mod7 via (None)
+362 = 0             # Mod7 dest (None)
+363 = 0             # Mod7 amount [%]
+370 = 0             # Mod8 source (None)
+371 = 0             # Mod8 via (None)
+372 = 0             # Mod8 dest (None)
+373 = 0             # Mod8 amount [%]
 
 # Operator A
 1000 = 3.5          # Ratio [x]

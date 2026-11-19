@@ -57,7 +57,7 @@ Record a knob gesture:
 3. Draw an automation clip by hand from 0 % to 100 %.
    - Expect: the knob sweeps 20 Hz → 20 kHz with the clip's *middle* at about **630 Hz** (CFS exposes continuous
      parameters as knob positions, so the sweep is even in pitch, not in Hz: see DECISIONS.md, L3.2 entry).
-4. FL's own parameter list: in the wrapper menu, **Browse parameters**. Expect 112 parameters as of L5.4 (60 global + 13 per operator; Phase F adds more, see section 7), grouped with
+4. FL's own parameter list: in the wrapper menu, **Browse parameters**. Expect 148 parameters as of L4.1 (64 global + 32 mod matrix + 13 per operator; Phase F adds more, see section 7), grouped with
    names like "Cutoff", "Op A Ratio"; menus (filter mode, LFO shape) show names, not numbers.
 
 ## 5. Save with the project
@@ -132,3 +132,24 @@ Each lesson adds a subsection. Reinstall the plugin after each build (`tools\ins
    12 while a note holds.
    - Expect: more stages = more notches = a deeper, more complex sweep, and the change makes no click.
 5. Change **Voices** on the chorus while holding a chord: no clicks, the swirl just thickens or thins.
+
+### L4.1: the mod matrix
+1. Load **FM pad**, **Brass** and **Organ** and play them as you did before this version: they should sound
+   **exactly** as before (the old LFO routes are now the matrix's fixed slots; tested bit for bit).
+2. Load **Evolving matrix** (factory preset 12) and hold a chord for 5 s.
+   - Expect: the tone opens over about 3 s (mod env → FM index), op A drifts slowly (a soft shimmer), the
+     whole chord swells gently (LFO 2 → amp), and each note you play has a slightly different brightness
+     (random → cutoff). Report: evolving, or just wobbly?
+3. Make your own route on the **Mod** page: Init preset; slot 1 = Source **LFO 2**, Via **Mod wheel**,
+   Dest **Cutoff**, Amount **40 %** (the column on the right shows "+3.20 oct"); switch the Filter (Synth page)
+   to Low-pass at about 1 kHz.
+   - Expect: with the wheel down, nothing moves; as you raise the wheel, LFO 2 sweeps the filter more and more.
+4. Slot 2 = **Velocity → Op D level, −50 %**: harder notes get quieter (a weird but clear test that per-note
+   sources work: play soft and hard notes in one chord).
+5. Automate a slot's **Amount** with an FL automation clip (Mod wheel or LFO → Pitch is the most sensitive).
+   - Known limitation: slot amounts are **not smoothed** yet, so a fast clip on a pitch route may zipper slightly.
+     Report whether you can hear it. (Changing a slot's *destination* while a note sounds jumps: it's a menu.)
+6. Poly-mod (only if FL supports CLAP per-note modulation, which I couldn't check): in FL's per-note tools
+   (piano roll note properties / "note modulation"), modulate CFS's **Cutoff** on one note of a chord.
+   - Expect: only that note's filter moves. With `CFS_CLAP_TRACE=1`, the summary line's `param mod` count tells
+     whether FL sent any PARAM_MOD at all; please report it.

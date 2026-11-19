@@ -80,6 +80,10 @@ inline void fillInfo(std::size_t index, clap_param_info& info) noexcept
             info.flags |= CLAP_PARAM_IS_ENUM; // the host may show a drop-down of the names
     }
     info.cookie = const_cast<synth::ParamInfo*>(&p); // CLAP's field is void*; we never write through it
+    // L4.1: polyphonic modulation. The host may send PARAM_MOD for these, for all notes or for one note (by note
+    // id, or by key). It's an offset on top of the parameter, per voice, never written into the patch.
+    if (p.polyMod)
+        info.flags |= CLAP_PARAM_IS_MODULATABLE | CLAP_PARAM_IS_MODULATABLE_PER_NOTE_ID | CLAP_PARAM_IS_MODULATABLE_PER_KEY;
     // Operator parameters share field names ("Ratio"), so the host's name carries the operator: "Op A Ratio".
     if (p.op >= 0)
         std::snprintf(info.name, sizeof info.name, "Op %.*s %.*s", static_cast<int>(synth::kOpNames[p.op].size()),

@@ -3,12 +3,19 @@
 //
 //   LFO 1 (vibrato) ─► pitch
 //   FmVoice (4 operators) ──► Svf (mode, cutoff from base + filter env + key + velocity) ──► steal fade ──►
+// Since L4.1 every modulation goes through the mod matrix (mod_matrix.h): the voice fills in its own sources
+// (LFO 1, envelopes, velocity, key, random), adds the per-voice slots to the Engine's global sums, and applies
+// the result to pitch, cutoff, resonance, index, amp, LFO 1 rate and each operator's level and pitch.
 #pragma once
 
 #include <fss/dsp/adsr.h>
 #include <fss/dsp/lfo.h>
 #include <fss/dsp/svf.h>
 #include <fss/synth/fm_voice.h>
+#include <fss/synth/mod_matrix.h>
+#include <fss/util/inline.h>
+#include <fss/util/math.h>
+#include <fss/util/random.h>
 
 #include <algorithm>
 #include <cstdint>
@@ -19,11 +26,16 @@ namespace fss::synth {
 /// matrix and the smoothed global filter controls. Computing them per voice would multiply the smoothing
 /// cost by 20, and they'd still have to agree across voices.
 struct VoiceControl {
-    const Algorithm* alg = nullptr; // live matrix (L2.4), scaled by LFO 2 when it modulates the index (L1.11)
-    float cutoffOctaves = 0.0f; // log2(base cutoff in Hz), smoothed, plus LFO 2's cutoff route
+    const Algorithm* alg = nullptr; // live matrix (L2.4), scaled by the GLOBAL index modulation (LFO 2...)
+    float cutoffOctaves = 0.0f; // log2(base cutoff in Hz), smoothed, plus the global cutoff modulation
     float q = 0.7071f;          // resonance, smoothed
     float modWheel = 0.0f;      // 0..1, smoothed (L1.11)
     float bendSemitones = 0.0f; // pitch bend × bend range, smoothed (L2.5): a pitch offset like vibrato
+    // The mod matrix (L4.1). The Engine fills the global sources and sums the global slots once per sample.
+    const Algorithm* liveAlg = nullptr;   // the unscaled live matrix, for a voice that scales the index itself
+    const ModValues* sources = &kNoModSources; // global source values ([None] = 1; per-voice entries unused)
+    const ModSums* global = &kNoModSums;       // the global slots' sums, per destination (cutoff/index already applied)
+    const ModRouting* routing = &kNoModRouting; // the per-voice slots
 };
 
 // FilterMode is Off followed by the SvfMode values in the same order (tick() relies on it).
@@ -36,6 +48,7 @@ public:
     {
         fm_.prepare(sampleRate, levelSmoothingMs);
         filterEnv_.prepare(sampleRate);
+        modEnv_.prepare(sampleRate);
         svf_.prepare(sampleRate);
         lfo1_.prepare(sampleRate);
         // Linear fade length; at least 1 sample so a "0 ms" fade is an instant cut, not a divide by zero.
@@ -47,7 +60,10 @@ public:
     {
         fm_.reset();
         filterEnv_.reset();
+        modEnv_.reset();
         svf_.reset();
+        host_.fill(0.0f);
+        lfoRateMod_ = 0.0f;
         busy_ = released_ = fading_ = sustained_ = false;
         fadeGain_ = 1.0f;
         glide_ = glideStep_ = 0.0f;
@@ -66,6 +82,15 @@ public:
         velocity_ = note.velocity;
         filterEnv_.setParams(patch.filter.env);
         filterEnv_.noteOn();
+        modEnv_.setParams(patch.mod.env); // L4.1
+        modEnv_.noteOn();
+        // A random value per note (L4.1), from the note counter: deterministic for renders, different per note.
+        util::XorShift32 rng(static_cast<std::uint32_t>(age * 2246822519u + 1u));
+        (void)rng.next();
+        random_ = rng.bipolar();
+        host_.fill(0.0f);   // the host's per-note modulation belongs to the note before; a new note starts clean
+        lfoRateMod_ = 0.0f;
+        opModActive_ = false; // fm_.start() reset every operator's offsets
         svf_.reset(); // a fresh note starts with empty "capacitors": no leftover ringing from the slot's last note
         lfo1_.setRate(patch.lfo1.rateHz);
         lfo1_.setDelayFade(patch.lfo1.delayMs, patch.lfo1.fadeMs);
@@ -86,6 +111,7 @@ public:
         if (busy_ && !released_) {
             fm_.noteOff();
             filterEnv_.noteOff();
+            modEnv_.noteOff();
             released_ = true;
         }
     }
@@ -131,40 +157,101 @@ public:
     void refreshLfo() noexcept
     {
         if (patch_)
-            lfo1_.setRate(patch_->lfo1.rateHz);
+            lfo1_.setRate(lfoRateMod_ != 0.0f ? patch_->lfo1.rateHz * util::pow2(lfoRateMod_) : patch_->lfo1.rateHz);
     }
     void refreshEnvelopes() noexcept
     {
         fm_.refreshEnvelopes();
-        if (patch_)
+        if (patch_) {
             filterEnv_.setParams(patch_->filter.env);
+            modEnv_.setParams(patch_->mod.env);
+        }
     }
 
+    /// CLAP polyphonic modulation (L4.1): the host's offset for this note, in the destination's unit
+    /// (only Cutoff and Resonance are host-modulatable). Replaces the previous value for that destination.
+    void setHostMod(ModDst d, float value) noexcept { host_[idx(d)] = value; }
+
     /// One sample. `ctl` carries the Engine's live (smoothed) matrix (L2.4) and filter controls (L1.10).
-    [[nodiscard]] float tick(const VoiceControl& ctl) noexcept
+    [[nodiscard]] FSS_FORCEINLINE float tick(const VoiceControl& ctl) noexcept // inlined: see util/inline.h
     {
-        // Vibrato (L1.11): depth in semitones, so it sounds the same on every note. The patch's depth waits
-        // for LFO 1's delay/fade; the mod wheel's is immediate (the player asked for it now).
+        // 1. This voice's modulation sources (L4.1). Envelopes and LFO 1 always run, so a slot switched on
+        //    mid-note finds them in place.
         lfo1_.setShape(patch_->lfo1.shape);
         const float lfo1 = lfo1_.tick();
-        const ModRoutes& r = patch_->routes;
+        const float env = filterEnv_.tick();
+        const float modEnv = modEnv_.tick();
+        // 2. The per-voice slots (the patch Vibrato and Wheel > vib routes are two of them: LFO 1 × fade and
+        //    LFO 1 × wheel → pitch), plus the host's per-note modulation. Destinations nobody modulates stay
+        //    exactly 0, and adding an exact 0 changes no bit (the golden test). With no per-voice slot at all
+        //    the source table isn't even filled in (most patches: measured in the L4.1 journal).
+        ModSums v{};
+        if (const ModRouting& rt = *ctl.routing; rt.numVoice > 0) {
+            ModValues src = *ctl.sources; // the global ones (LFO 2, wheel, bend) and [None] = 1
+            const std::uint32_t used = rt.voiceSources; // fill in only what a slot reads (measured, L4.1)
+            auto uses = [used](ModSrc s) { return (used & (1u << idx(s))) != 0; };
+            src[idx(ModSrc::Lfo1)] = lfo1;
+            if (uses(ModSrc::Lfo1Fade))
+                src[idx(ModSrc::Lfo1Fade)] = lfo1_.fadeGain();
+            src[idx(ModSrc::ModEnv)] = modEnv;
+            src[idx(ModSrc::FilterEnv)] = env;
+            src[idx(ModSrc::Velocity)] = velocity_;
+            if (uses(ModSrc::Key))
+                src[idx(ModSrc::Key)] = (pitch() - kKeyBreakpoint) / 64.0f;
+            src[idx(ModSrc::Random)] = random_;
+            accumulate(rt.voice.data(), rt.numVoice, src, v);
+        }
+        const std::uint32_t touched = ctl.routing->touched;
+        v[idx(ModDst::Cutoff)] += host_[idx(ModDst::Cutoff)];
+        v[idx(ModDst::Resonance)] += host_[idx(ModDst::Resonance)];
+        const ModSums& g = *ctl.global;
+        auto both = [&](ModDst d) { return g[idx(d)] + v[idx(d)]; };
+
         if (glide_ != 0.0f) // portamento: one constant step per sample toward 0, landing exactly on it
             glide_ = std::abs(glide_) <= glideStep_ ? 0.0f : glide_ - std::copysign(glideStep_, glide_);
-        // All pitch modulation meets here, in semitones: bend (L2.5) + glide (L2.5) + vibrato (L1.11).
-        fm_.setPitchOffset(ctl.bendSemitones + glide_ +
-                           lfo1 * (r.vibratoSemitones * lfo1_.fadeGain() + ctl.modWheel * r.wheelVibratoSemitones));
+        // All pitch modulation meets here, in semitones: bend (L2.5) + glide (L2.5) + the matrix (vibrato...).
+        fm_.setPitchOffset(ctl.bendSemitones + glide_ + g[idx(ModDst::Pitch)] + v[idx(ModDst::Pitch)]);
+        // Operators: only while a slot reaches one (and once more after the last such slot goes, to put them
+        // back to unmodulated: otherwise they'd keep the last offset).
+        const bool opsNow = (touched & kOpDestBits) != 0;
+        if (opsNow || opModActive_)
+            for (int k = 0; k < kNumOps; ++k) {
+                const auto d = static_cast<std::size_t>(k);
+                fm_.setOpPitch(k, both(static_cast<ModDst>(idx(ModDst::OpAPitch) + d)));
+                const float lv = both(static_cast<ModDst>(idx(ModDst::OpALevel) + d));
+                fm_.setOpLevelMod(k, lv != 0.0f ? std::max(0.0f, 1.0f + lv) : 1.0f);
+            }
+        opModActive_ = opsNow;
+        if (const float rate = both(ModDst::Lfo1Rate); rate != lfoRateMod_) {
+            lfoRateMod_ = rate;
+            refreshLfo();
+        }
 
-        float y = fm_.tick(*ctl.alg);
-        const float env = filterEnv_.tick(); // always runs, so switching the filter on mid-note finds it in place
+        // 3. The FM index: the Engine already scaled ctl.alg by the GLOBAL index modulation; a per-voice one
+        //    needs this voice's own copy of the matrix.
+        const Algorithm* alg = ctl.alg;
+        if (const float vi = v[idx(ModDst::Index)]; vi != 0.0f) {
+            const float k = std::max(0.0f, 1.0f + g[idx(ModDst::Index)] + vi);
+            scaled_ = *ctl.liveAlg;
+            for (auto& row : scaled_.mod)
+                for (float& m : row)
+                    m *= k;
+            alg = &scaled_;
+        }
+
+        float y = fm_.tick(*alg);
         if (const FilterParams& f = patch_->filter; f.mode != FilterMode::Off) {
             const float octaves = ctl.cutoffOctaves + f.envOctaves * env +
                                   f.keyTrack * (pitch() - kKeyBreakpoint) / 12.0f + // follows a glide smoothly
-                                  f.velOctaves * (velocity_ - 1.0f);
+                                  f.velOctaves * (velocity_ - 1.0f) + v[idx(ModDst::Cutoff)];
+            const float res = both(ModDst::Resonance);
             // Octaves → Hz, then the SVF prewarps (tan). Two transcendentals per sample per voice: measured
             // in L2.6. The SVF clamps the result to [1 Hz, 0.49·fs].
-            svf_.set(util::pow2(octaves), ctl.q); // e^(x·ln2): ~14x cheaper than std::exp2 here (L2.6)
+            svf_.set(util::pow2(octaves), res != 0.0f ? ctl.q * util::pow2(res) : ctl.q); // pow2: the fast exp (L2.6)
             y = svf_.tick(y, static_cast<dsp::SvfMode>(static_cast<int>(f.mode) - 1)); // FilterMode = SvfMode + 1
         }
+        if (const float amp = both(ModDst::Amp); amp != 0.0f)
+            y *= util::pow2(amp * (1.0f / 6.0206f)); // dB → gain: 6.02 dB per doubling
         if (fading_) {
             fadeGain_ -= fadeStep_;
             if (fadeGain_ <= 0.0f) {
@@ -190,6 +277,12 @@ public:
 private:
     FmVoice fm_;
     dsp::Adsr filterEnv_;
+    dsp::Adsr modEnv_;    // L4.1: a matrix source only
+    float random_ = 0.0f; // L4.1: this note's random value, −1..1
+    ModSums host_{};      // L4.1: the host's per-note modulation (CLAP PARAM_MOD), destination units
+    float lfoRateMod_ = 0.0f; // L4.1: the LFO 1 rate modulation currently applied (octaves)
+    bool opModActive_ = false; // L4.1: the operators had matrix offsets on the previous sample
+    Algorithm scaled_{};  // L4.1: this voice's own index-scaled matrix, when a per-voice slot scales the index
     dsp::Svf svf_;
     dsp::Lfo lfo1_;
     float velocity_ = 1.0f;

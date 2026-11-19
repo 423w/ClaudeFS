@@ -74,6 +74,9 @@ void caption(const ParamInfo& p, char* out, std::size_t size)
     // name, since the panel's title already says it. ("Width" alone stays: nothing would be left.)
     if (n.size() > p.group.size() + 1 && n.starts_with(p.group) && n[p.group.size()] == ' ')
         n.remove_prefix(p.group.size() + 1);
+    // Matrix slots (L4.1): "Mod3 dest" sits in row 3 of the matrix; the row says which slot it is.
+    if (n.size() > 5 && n.starts_with("Mod") && n[3] >= '1' && n[3] <= '9' && n[4] == ' ')
+        n.remove_prefix(5);
     std::snprintf(out, size, "%.*s", static_cast<int>(n.size()), n.data());
     if (out[0] >= 'a' && out[0] <= 'z')
         out[0] = static_cast<char>(out[0] - 'a' + 'A');
@@ -550,6 +553,50 @@ void fxPage(EditorModel& m, EditorState& st)
     }
 }
 
+/// Page 2 (L4.1): the mod envelope on the left, the matrix on the right: one row per slot, its four controls
+/// in a line (source, via, destination, amount) and what the amount means in the destination's own unit.
+void modPage(EditorModel& m, EditorState& st)
+{
+    const ImVec2 avail = ImGui::GetContentRegionAvail();
+    const float leftW = avail.x * 0.24f;
+    ImGui::BeginChild("modenv", ImVec2(leftW, avail.y), ImGuiChildFlags_Borders);
+    ImGui::SeparatorText("Mod env");
+    controlTable(m, st, "modenv", group("Mod env"));
+    ImGui::Spacing();
+    ImGui::SeparatorText("Fixed routes");
+    ImGui::TextWrapped("Vibrato, Wheel > vib (LFO 1 page) and LFO2 > cutoff / index are the matrix's four fixed "
+                       "slots, evaluated before the eight below.");
+    ImGui::EndChild();
+    ImGui::SameLine();
+    ImGui::BeginChild("matrix", ImVec2(0.0f, avail.y), ImGuiChildFlags_Borders);
+    ImGui::SeparatorText("Mod matrix: source x via -> destination");
+    const synth::Patch& patch = m.editorPatch();
+    if (ImGui::BeginTable("slots", 6, ImGuiTableFlags_SizingStretchProp | ImGuiTableFlags_RowBg)) {
+        ImGui::TableSetupColumn("#", ImGuiTableColumnFlags_WidthFixed, ImGui::GetFontSize() * 1.2f);
+        for (const char* c : {"src", "via", "dst"})
+            ImGui::TableSetupColumn(c, ImGuiTableColumnFlags_WidthStretch, 1.0f);
+        ImGui::TableSetupColumn("amt", ImGuiTableColumnFlags_WidthStretch, 0.6f);
+        ImGui::TableSetupColumn("unit", ImGuiTableColumnFlags_WidthStretch, 0.7f);
+        for (int s = 0; s < synth::kNumModSlots; ++s) {
+            using synth::param_id::ModField;
+            ImGui::TableNextRow();
+            ImGui::TableNextColumn();
+            ImGui::Text("%d", s + 1);
+            for (ModField f : {ModField::Source, ModField::Via, ModField::Dest, ModField::Amount}) {
+                ImGui::TableNextColumn();
+                control(m, st, indexOfId(synth::param_id::modSlot(s, f)));
+            }
+            ImGui::TableNextColumn();
+            const synth::ModSlotParams& slot = patch.mod.slots[static_cast<std::size_t>(s)];
+            const synth::ModDestInfo& d = synth::kModDests[synth::idx(slot.dst)];
+            if (slot.dst != synth::ModDst::None && slot.src != synth::ModSrc::None)
+                ImGui::TextDisabled("%+.2f %.*s", slot.amountPct * 0.01f * d.range, static_cast<int>(d.unit.size()), d.unit.data());
+        }
+        ImGui::EndTable();
+    }
+    ImGui::EndChild();
+}
+
 } // namespace
 
 void drawEditor(EditorModel& m, EditorState& st)
@@ -565,8 +612,11 @@ void drawEditor(EditorModel& m, EditorState& st)
     topBar(m, st);
     pageButtons(st);
     ImGui::Separator();
-    if (st.page == 1) {
-        fxPage(m, st);
+    if (st.page == 1 || st.page == 2) {
+        if (st.page == 1)
+            fxPage(m, st);
+        else
+            modPage(m, st);
         ImGui::End();
         return;
     }

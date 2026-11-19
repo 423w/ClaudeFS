@@ -564,3 +564,51 @@ TEST_CASE("clap plugin: the host tempo (transport) reaches the synced delay, and
     pl.run(64, &in2, nullptr, l.data(), r.data(), &tr); // the block starts at 90, changes at frame 10
     CHECK(tail->get(pl.p) == 18001u);
 }
+
+TEST_CASE("clap plugin: cutoff is modulatable per note, and PARAM_MOD reaches that note only", "[clap][polymod]")
+{
+    Plugin pl;
+    clap_param_info info{};
+    const int ci = plugin::indexOf(synth::param_id::kCutoff);
+    REQUIRE(pl.params->get_info(pl.p, static_cast<std::uint32_t>(ci), &info));
+    CHECK((info.flags & CLAP_PARAM_IS_MODULATABLE) != 0);
+    CHECK((info.flags & CLAP_PARAM_IS_MODULATABLE_PER_NOTE_ID) != 0);
+    REQUIRE(pl.params->get_info(pl.p, static_cast<std::uint32_t>(plugin::indexOf(synth::param_id::kOutputDb)), &info));
+    CHECK((info.flags & CLAP_PARAM_IS_MODULATABLE) == 0);
+
+    // Filter on, two notes with note ids 10 and 11; then a PARAM_MOD for note 10 only. Compare with a second
+    // plugin that gets the same notes and a PARAM_MOD for a note id nobody plays (= no effect).
+    auto run = [](std::int32_t modNoteId) {
+        Plugin q;
+        InList setup;
+        setup.param(0, synth::param_id::kFilterMode, 1.0);
+        clap_event_note a{}, b{};
+        a.header = {sizeof a, 0, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_NOTE_ON, 0};
+        a.note_id = 10;
+        a.key = 60;
+        a.channel = 0;
+        a.port_index = 0;
+        a.velocity = 1.0;
+        b = a;
+        b.note_id = 11;
+        b.key = 67;
+        setup.add(a);
+        setup.add(b);
+        clap_event_param_mod m{};
+        m.header = {sizeof m, 0, CLAP_CORE_EVENT_SPACE_ID, CLAP_EVENT_PARAM_MOD, 0};
+        m.param_id = synth::param_id::kCutoff;
+        m.note_id = modNoteId;
+        m.port_index = 0;
+        m.channel = -1;
+        m.key = -1;
+        m.amount = -0.4;
+        setup.add(m);
+        std::vector<float> l(2048), r(2048);
+        q.run(2048, &setup, nullptr, l.data(), r.data());
+        return l;
+    };
+    const auto modded = run(10), untouched = run(99);
+    CHECK(modded != untouched);
+    // And a mod for a note that doesn't exist is exactly no mod: same as a third run with note 99 again.
+    CHECK(untouched == run(99));
+}

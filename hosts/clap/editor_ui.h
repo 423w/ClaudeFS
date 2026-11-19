@@ -52,8 +52,9 @@ struct EditorState {
     std::array<std::array<float, 4>, kNumParams> rects{};
 };
 
-/// The editor's pages, in button order. Page 0 is the voice (operators, filter, LFOs); page 1 the FX chain.
-inline constexpr const char* kPageNames[] = {"Synth", "FX"};
+/// The editor's pages, in button order. Page 0 is the voice (operators, filter, LFOs); page 1 the FX chain;
+/// page 2 the modulation matrix and mod envelope (L4.1).
+inline constexpr const char* kPageNames[] = {"Synth", "FX", "Mod"};
 inline constexpr int kNumPages = static_cast<int>(std::size(kPageNames));
 
 /// Draw the whole editor as one ImGui window covering the display. Call between ImGui::NewFrame and Render.

@@ -21,7 +21,11 @@ struct Event {
                      // wheel (CC 1). CCs mapped to *parameters* are translated by the host (param table).
         Tempo,       // value = the host's tempo in BPM (L5.3): tempo-synced effects follow it. Not part of the
                      // patch (the song owns the tempo); hosts without a transport never send it (120 BPM).
+        ParamMod,    // L4.1, CLAP polyphonic modulation: paramId, value = an offset in the parameter's NORMALIZED
+                     // (knob) units, for one note (noteId ≥ 0, or key ≠ kAnyKey) or, with both wildcards, for all.
+                     // Never changes the patch: it rides on top of the parameter, per voice.
     };
+    static constexpr std::uint8_t kAnyKey = 255; // ParamMod: no key given
 
     Type type = Type::NoteOn;
     std::uint32_t frame = 0;   // offset within the current block; events must be sorted by frame
@@ -50,6 +54,11 @@ struct Event {
         return {Type::ParamChange, frame, -1, 0, 0, plainValue, id};
     }
     static constexpr Event tempo(std::uint32_t frame, float bpm) { return {Type::Tempo, frame, -1, 0, 0, bpm}; }
+    static constexpr Event paramMod(std::uint32_t frame, std::uint32_t id, float normalizedOffset, std::int32_t noteId = -1,
+                                    std::uint8_t key = kAnyKey)
+    {
+        return {Type::ParamMod, frame, noteId, key, 0, normalizedOffset, id};
+    }
 };
 
 } // namespace fss

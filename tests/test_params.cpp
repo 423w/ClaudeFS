@@ -38,7 +38,7 @@ TEST_CASE("param table: unique ids, unique names per group, sane ranges, default
         for (char c : p.name)
             CHECK(static_cast<unsigned char>(c) < 128); // ASCII (CLAUDE.md: console/DAW text)
     }
-    CHECK(kParams.size() == detail::kNumGlobalParams + 4 * kNumOpFields);
+    CHECK(kParams.size() == detail::kNumGlobalParams + 4 * kNumOpFields + detail::kNumModSlotParams); // + L4.1's slots
 }
 
 TEST_CASE("param table: defaults are exactly what a default Patch holds", "[params]")

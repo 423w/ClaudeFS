@@ -23,6 +23,7 @@
 #include <fss/fx/fx_params.h>
 #include <fss/synth/algorithm.h>
 #include <fss/synth/held_notes.h>
+#include <fss/synth/mod_matrix.h>
 #include <fss/util/units.h>
 
 #include <array>
@@ -79,7 +80,7 @@ struct LfoParams {
 ///   pitch   += lfo1 · (vibratoSemitones · lfo1 fade + modWheel · wheelVibratoSemitones)   [semitones]
 ///   cutoff  += lfo2 · lfo2CutoffOctaves                                                    [octaves]
 ///   every modulation amount (the FM index, feedback included) × max(0, 1 + lfo2 · lfo2IndexAmount)
-/// L4.1 replaces this fixed wiring with a modulation matrix.
+/// Since L4.1 these are the modulation matrix's four fixed slots (mod_matrix.h), ahead of the user slots.
 struct ModRoutes {
     float vibratoSemitones = 0.0f;
     float wheelVibratoSemitones = 0.5f; // only acts when the mod wheel is up: 0 wheel = no vibrato
@@ -92,6 +93,12 @@ struct ModRoutes {
 ///   Mono    one voice; every new key restarts the envelopes ("retrigger"), with a 5 ms steal fade
 ///   Legato  one voice; while a key is held, a new key only changes the pitch (envelopes keep going)
 enum class VoiceMode : std::uint8_t { Poly, Mono, Legato };
+
+/// The modulation matrix's user slots and its own envelope (L4.1).
+struct ModMatrixParams {
+    std::array<ModSlotParams, kNumModSlots> slots{};
+    dsp::AdsrParams env{.attackMs = 1.0f, .decayMs = 500.0f, .sustain = 0.0f, .releaseMs = 300.0f}; // "Mod env"
+};
 
 struct VoiceParams {
     VoiceMode mode = VoiceMode::Poly;
@@ -108,6 +115,7 @@ struct Patch {
     LfoParams lfo1{};
     LfoParams lfo2{.rateHz = 2.0f, .keySync = false};
     ModRoutes routes{};
+    ModMatrixParams mod{};                // L4.1: 8 slots + the mod envelope; all slots off by default
     VoiceParams voice{};
     util::Hz tuningA4{440.0};
     util::Semitones bendRange{2.0};       // full pitch-bend wheel deflection

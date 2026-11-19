@@ -92,6 +92,8 @@ private:
     void render(float* outL, float* outR, int from, int to) noexcept;
     void settleMatrix() noexcept;
     void restartLfos() noexcept;
+    void rebuildRouting() noexcept;           // L4.1: patch (routes + slots) → the compiled mod routing
+    void paramMod(const Event& e) noexcept;   // L4.1: CLAP polyphonic modulation
     [[nodiscard]] synth::Voice* findFreeVoice() noexcept;
     [[nodiscard]] synth::Voice* chooseVictim() noexcept;
 
@@ -105,7 +107,11 @@ private:
     dsp::Lfo lfo2_;                 // the global LFO (L1.11)
     dsp::Phasor lfo1Reference_;     // shared phase for voices whose LFO 1 isn't key-synced
     dsp::OnePoleSmoother modWheel_{};
-    synth::Algorithm indexScaled_{}; // live_ with every modulation amount scaled by LFO 2 (when routed)
+    synth::Algorithm indexScaled_{}; // live_ with every modulation amount scaled by the global index modulation
+    synth::ModRouting routing_{};    // L4.1: the matrix, compiled from the patch (fixed L1.11 slots + 8 user slots)
+    synth::ModValues globalSrc_{};   // L4.1: this sample's global source values
+    synth::ModSums globalSums_{};    // L4.1: this sample's global slot sums
+    synth::ModSums hostGlobal_{};    // L4.1: the host's all-notes modulation (PARAM_MOD with no note/key)
     bool smoothing_ = true;
     bool flushDenormals_ = true;
     int polyphony_ = kMaxPolyphony;
