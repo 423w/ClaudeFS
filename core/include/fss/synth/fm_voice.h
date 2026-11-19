@@ -82,6 +82,7 @@ public:
         velocity_ = note.velocity;
         bend_ = note.bend;
         pitchOffset_ = 0.0f;
+        pitchRatio_ = 1.0;
         opPitch_.fill(0.0f);
         for (int i = 0; i < kNumOps; ++i) {
             ops_[static_cast<std::size_t>(i)].setLevelMod(1.0f);
@@ -91,6 +92,7 @@ public:
             o.setFrequency(operatorFrequencyHz(patch, p, note.key, note.bend));
             o.setLevel(operatorLevel(p, note.key, note.velocity));
             o.setEnvelope(scaledEnvelope(p, note.key));
+            o.setWave(static_cast<dsp::OpWave>(std::min<int>(p.wave, dsp::kNumOpWaves - 1)));
         }
         noteOn();
     }
@@ -123,8 +125,21 @@ public:
         if (semitones == pitchOffset_)
             return;
         pitchOffset_ = semitones;
+        pitchRatio_ = util::pow2(static_cast<double>(semitones) / 12.0); // per sample: the fast exp (L2.6)
         applyPitchRatio();
     }
+    /// The same, with the ratio 2^(semitones/12) already computed by the caller (L4.4 open item, fixed in L4.2:
+    /// a unison voice computes its own pitch ratio once and multiplies each copy's cached detune ratio in, instead
+    /// of a pow2 per copy per sample). `semitones` is only the cache key.
+    void setPitchOffsetRatio(float semitones, double ratio) noexcept
+    {
+        if (semitones == pitchOffset_)
+            return;
+        pitchOffset_ = semitones;
+        pitchRatio_ = ratio;
+        applyPitchRatio();
+    }
+    [[nodiscard]] float pitchOffset() const noexcept { return pitchOffset_; }
 
     /// Mod matrix (L4.1): one operator's own pitch offset (semitones, on top of the voice's) and level
     /// multiplier. Cheap when nothing changes: the ratio is only recomputed when the offset moves.
@@ -159,6 +174,15 @@ public:
         for (int i = 0; i < kNumOps; ++i)
             ops_[static_cast<std::size_t>(i)].setLevelSmoothed(
                 operatorLevel(patch_->ops[static_cast<std::size_t>(i)], key_, velocity_));
+    }
+    /// Waveforms (L4.2): switch at once (a waveform change is a timbre step, like a menu).
+    void refreshWaves() noexcept
+    {
+        if (!patch_)
+            return;
+        for (int i = 0; i < kNumOps; ++i)
+            ops_[static_cast<std::size_t>(i)].setWave(
+                static_cast<dsp::OpWave>(std::min<int>(patch_->ops[static_cast<std::size_t>(i)].wave, dsp::kNumOpWaves - 1)));
     }
     /// Envelope times/sustain and rate scaling: take effect immediately (sustain changes glide inside Adsr).
     void refreshEnvelopes() noexcept
@@ -249,7 +273,7 @@ private:
     {
         if (!patch_)
             return;
-        const double r = util::pow2(static_cast<double>(pitchOffset_) / 12.0); // per sample: the fast exp (L2.6)
+        const double r = pitchRatio_; // 2^(pitchOffset/12), computed where the offset was set
         for (std::size_t i = 0; i < kNumOps; ++i) {
             // An operator's own matrix pitch (L4.1) multiplies in only when it's set: r · 1 would be exact too,
             // but skipping the pow2 keeps the unmodulated cost where it was.
@@ -260,6 +284,7 @@ private:
 
     const Patch* patch_ = nullptr; // set by start(); read again by the refresh functions
     float pitchOffset_ = 0.0f;     // semitones, from setPitchOffset()
+    double pitchRatio_ = 1.0;      // 2^(pitchOffset_/12)
     std::array<float, kNumOps> opPitch_{}; // per-operator semitones from the mod matrix (L4.1)
     std::uint8_t key_ = 0;
     float velocity_ = 1.0f, bend_ = 0.0f;

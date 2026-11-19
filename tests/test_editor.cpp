@@ -174,3 +174,52 @@ TEST_CASE("editor: clicking an algorithm thumbnail switches the algorithm in one
     CHECK(m.calls[2].kind == 'e');
     CHECK(m.patch.algorithmNumber == 3);
 }
+
+TEST_CASE("editor: an operator's Ratio knob snaps to harmonic ratios (L4.2); Ctrl drags freely", "[editor]")
+{
+    CHECK(plugin::snapRatio(1.07f) == 1.0f);
+    CHECK(plugin::snapRatio(2.6f) == 3.0f); // nearest by ratio: 2.6/2 = 1.30, 3/2.6 = 1.15
+    CHECK(plugin::snapRatio(0.3f) == 0.25f);
+    CHECK(plugin::snapRatio(0.4f) == 0.5f);
+    CHECK(plugin::snapRatio(0.1f) == 0.125f);
+    CHECK(plugin::snapRatio(40.0f) == 32.0f);
+
+    HeadlessImGui ui;
+    FakeModel m;
+    EditorState st;
+    ImGuiIO& io = ImGui::GetIO();
+    ui.frame(m, st);
+    const std::uint32_t id = synth::param_id::op(0, synth::OpField::Ratio);
+    auto drag = [&](bool ctrl) {
+        m.calls.clear();
+        const ImVec2 c = centerOf(st, id);
+        io.AddKeyEvent(ImGuiMod_Ctrl, ctrl);
+        io.AddMousePosEvent(c.x, c.y);
+        ui.frame(m, st);
+        io.AddMouseButtonEvent(0, true);
+        ui.frame(m, st);
+        for (int k = 1; k <= 12; ++k) {
+            io.AddMousePosEvent(c.x, c.y - 3.0f * static_cast<float>(k));
+            ui.frame(m, st);
+        }
+        io.AddMouseButtonEvent(0, false);
+        ui.frame(m, st);
+        io.AddKeyEvent(ImGuiMod_Ctrl, false);
+        ui.frame(m, st);
+    };
+    drag(false);
+    int sets = 0;
+    for (const auto& c : m.calls)
+        if (c.kind == 's') {
+            ++sets;
+            CHECK(plugin::snapRatio(c.value) == c.value); // every value it sends is a harmonic ratio
+        }
+    CHECK(sets > 0);
+    CHECK(m.patch.ops[0].ratio.value > 1.0); // and the drag still moved it (it doesn't stick in one basin)
+    drag(true);
+    bool offGrid = false;
+    for (const auto& c : m.calls)
+        if (c.kind == 's' && plugin::snapRatio(c.value) != c.value)
+            offGrid = true;
+    CHECK(offGrid);
+}

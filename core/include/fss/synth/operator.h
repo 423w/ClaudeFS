@@ -20,9 +20,11 @@
 #pragma once
 
 #include <fss/dsp/adsr.h>
+#include <fss/dsp/op_waves.h>
 #include <fss/dsp/phasor.h>
 #include <fss/dsp/smoother.h>
 #include <fss/dsp/sine.h>
+#include <fss/util/inline.h>
 
 #include <cstdint>
 #include <numbers>
@@ -78,7 +80,21 @@ public:
     /// the smoothed level, so (level · 1) · env · sine is bit-identical to the unmodulated product.
     void setLevelMod(float m) noexcept { levelMod_ = m; }
     /// Jump the oscillator's phase (L4.4: unison copies start at random phases, so they don't add up in phase).
-    void setPhase(dsp::Phase p) noexcept { phasor_.reset(p); }
+    void setPhase(dsp::Phase p) noexcept
+    {
+        phasor_.reset(p);
+        last_ = p - phasor_.increment();
+    }
+    /// The waveform (L4.2, dsp/op_waves.h). Sine is the operator of before L4.2, bit for bit. The sine path doesn't
+    /// track the previous phase (one store per operator per sample saved), so a switch AWAY from sine estimates it
+    /// from the oscillator alone; only the first sample's band-limiting can be off by the modulation's step.
+    void setWave(dsp::OpWave w) noexcept
+    {
+        if (w != wave_ && wave_ == dsp::OpWave::Sine)
+            last_ = phasor_.phase() - phasor_.increment();
+        wave_ = w;
+    }
+    [[nodiscard]] dsp::OpWave wave() const noexcept { return wave_; }
     /// Glides to the new level (one-pole, see prepare): for live knob changes while a note sounds (L2.4).
     void setLevelSmoothed(float level) noexcept { level_.setTarget(level); }
 
@@ -87,6 +103,7 @@ public:
     void noteOn() noexcept
     {
         phasor_.reset();
+        last_ = 0u - phasor_.increment(); // as if the phase had been running: the first step is a normal one
         env_.noteOn();
     }
     void noteOff() noexcept { env_.noteOff(); }
@@ -95,7 +112,19 @@ public:
     [[nodiscard]] float tick(float pmRadians = 0.0f) noexcept
     {
         const dsp::Phase p = phasor_.tick() + radiansToPhase(pmRadians); // unsigned add: wraps for free
-        return level_.tick() * levelMod_ * env_.tick() * dsp::sineTable(p);
+        if (wave_ == dsp::OpWave::Sine) // the common case, exactly the pre-L4.2 arithmetic
+            return level_.tick() * levelMod_ * env_.tick() * dsp::sineTable(p);
+        return level_.tick() * levelMod_ * env_.tick() * otherWave(p); // L4.2, out of line (util/inline.h)
+    }
+
+    /// The other waves (L4.2). The band-limited ones need this sample's phase step, modulation included: the
+    /// difference of two phases, read as a fraction of a cycle. Above 1/2 cycle it's either faster than Nyquist or
+    /// the phase went backwards (deep modulation): no valid correction, so 0 (the naive wave).
+    [[nodiscard]] FSS_NOINLINE float otherWave(dsp::Phase p) noexcept
+    {
+        const double step = dsp::phaseToCycles(p - last_);
+        last_ = p;
+        return dsp::opWave(wave_, p, step <= 0.5 ? step : 0.0);
     }
 
     [[nodiscard]] bool isActive() const noexcept { return env_.isActive(); }
@@ -107,6 +136,8 @@ private:
     dsp::Adsr env_;
     dsp::OnePoleSmoother level_{};
     float levelMod_ = 1.0f;
+    dsp::OpWave wave_ = dsp::OpWave::Sine;
+    dsp::Phase last_ = 0; // the previous sample's total phase (for the instantaneous step, L4.2)
 };
 
 } // namespace fss::synth

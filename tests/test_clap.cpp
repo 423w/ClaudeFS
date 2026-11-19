@@ -650,3 +650,23 @@ TEST_CASE("clap plugin: clap.latency follows the oversampling, changed only thro
     CHECK(gRestarts == 1);
     CHECK(lat->get(pl.p) == 37u);
 }
+
+TEST_CASE("clap plugin: FM oversampling changes the latency through a restart too (L4.2)", "[clap][latency]")
+{
+    Plugin pl;
+    const auto* lat = static_cast<const clap_plugin_latency*>(pl.p->get_extension(pl.p, CLAP_EXT_LATENCY));
+    REQUIRE(lat != nullptr);
+    gRestarts = gLatencyChanged = 0;
+    InList in;
+    in.param(0, synth::param_id::kFmOversampling, 1.0);
+    std::vector<float> l(64), r(64);
+    pl.run(64, &in, nullptr, l.data(), r.data());
+    CHECK(gRestarts == 1);
+    CHECK(lat->get(pl.p) == 0u);
+    pl.p->stop_processing(pl.p);
+    pl.p->deactivate(pl.p);
+    REQUIRE(pl.p->activate(pl.p, 48000.0, 1, 4096));
+    REQUIRE(pl.p->start_processing(pl.p));
+    CHECK(gLatencyChanged == 1);
+    CHECK(lat->get(pl.p) == 16u);
+}

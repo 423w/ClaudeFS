@@ -93,6 +93,28 @@ float minCellWidth() { return ImGui::GetFontSize() * 3.9f; }
 
 // ---- the knob -------------------------------------------------------------------------------------------
 
+} // namespace
+
+float snapRatio(float ratio) noexcept
+{
+    static constexpr float kFractions[] = {0.125f, 0.25f, 0.5f};
+    float best = 1.0f, bestDist = 1e9f;
+    auto consider = [&](float c) {
+        const float d = std::abs(std::log(ratio / c));
+        if (d < bestDist) {
+            bestDist = d;
+            best = c;
+        }
+    };
+    for (float f : kFractions)
+        consider(f);
+    for (int n = 1; n <= 32; ++n)
+        consider(static_cast<float>(n));
+    return best;
+}
+
+namespace {
+
 /// A rotary knob for parameter i: drag up/down (shift = fine), double-click = default. The whole cell
 /// (knob + caption + value) is one invisible button, so the gesture starts wherever the user grabs it.
 void knob(EditorModel& m, EditorState& st, std::size_t i)
@@ -113,12 +135,17 @@ void knob(EditorModel& m, EditorState& st, std::size_t i)
             m.setEdit(i, p.def);
             norm = synth::toNormalized(p, p.def);
         }
+        st.dragNorm = norm;
     }
     if (active && io.MouseDelta.y != 0.0f) {
         // 12 font-heights of travel = the full range (so it feels the same at any UI scale); shift = 10× finer.
         const float perPixel = 1.0f / (u * 12.0f) * (io.KeyShift ? 0.1f : 1.0f);
-        norm = std::clamp(norm - io.MouseDelta.y * perPixel, 0.0f, 1.0f);
-        m.setEdit(i, synth::fromNormalized(p, norm));
+        st.dragNorm = std::clamp(st.dragNorm - io.MouseDelta.y * perPixel, 0.0f, 1.0f);
+        float plain = synth::fromNormalized(p, st.dragNorm);
+        if (p.op >= 0 && p.field == synth::OpField::Ratio && !io.KeyCtrl)
+            plain = snapRatio(plain); // L4.2: harmonic ratios unless Ctrl is held
+        m.setEdit(i, plain);
+        norm = synth::toNormalized(p, plain);
     }
     if (ImGui::IsItemDeactivated())
         m.endEdit(i);
@@ -152,8 +179,8 @@ void knob(EditorModel& m, EditorState& st, std::size_t i)
     centeredText(dl, c.x, top.y + d + u * 0.05f, ImGui::GetColorU32(ImGuiCol_Text), label);
     centeredText(dl, c.x, top.y + d + u * 1.0f, kTextDim, value);
     if (hovered && !active)
-        ImGui::SetTooltip("%.*s: %s\ndrag up/down (shift: fine), double-click: default", static_cast<int>(p.name.size()),
-                          p.name.data(), value);
+        ImGui::SetTooltip("%.*s: %s\ndrag up/down (shift: fine%s), double-click: default", static_cast<int>(p.name.size()),
+                          p.name.data(), value, p.op >= 0 && p.field == synth::OpField::Ratio ? ", ctrl: no snapping" : "");
     ImGui::PopID();
 }
 
@@ -338,7 +365,7 @@ void algorithmPanel(EditorModel& m, EditorState& st)
     ImGui::SeparatorText("Algorithm");
     const float w = ImGui::GetContentRegionAvail().x;
     const ImVec2 a = ImGui::GetCursorScreenPos();
-    const float h = std::min(w * 0.75f, u * 11.0f);
+    const float h = std::min(w * 0.6f, u * 8.5f); // L4.2: shorter, so the left column fits without scrolling
     float levels[synth::kNumOps];
     for (std::size_t k = 0; k < synth::kNumOps; ++k)
         levels[k] = patch.ops[k].level;
@@ -356,17 +383,17 @@ void algorithmPanel(EditorModel& m, EditorState& st)
             ImGui::SameLine();
         ImGui::PushID(k);
         const ImVec2 p = ImGui::GetCursorScreenPos();
-        if (ImGui::InvisibleButton("##alg", ImVec2(t, t * 0.8f)) && patch.algorithmNumber != k + 1)
+        if (ImGui::InvisibleButton("##alg", ImVec2(t, t * 0.66f)) && patch.algorithmNumber != k + 1)
             tap(m, algIndex, static_cast<float>(k + 1));
         const bool selected = patch.algorithmNumber == k + 1;
         ImDrawList* dl = ImGui::GetWindowDrawList();
-        dl->AddRectFilled(p, ImVec2(p.x + t, p.y + t * 0.8f), selected ? IM_COL32(70, 56, 36, 255) : IM_COL32(36, 38, 44, 255), u * 0.2f);
+        dl->AddRectFilled(p, ImVec2(p.x + t, p.y + t * 0.66f), selected ? IM_COL32(70, 56, 36, 255) : IM_COL32(36, 38, 44, 255), u * 0.2f);
         if (ImGui::IsItemHovered()) {
-            dl->AddRect(p, ImVec2(p.x + t, p.y + t * 0.8f), kTrack, u * 0.2f);
+            dl->AddRect(p, ImVec2(p.x + t, p.y + t * 0.66f), kTrack, u * 0.2f);
             const std::string_view label = synth::valueLabel(kParams[algIndex], k + 1);
             ImGui::SetTooltip("%.*s", static_cast<int>(label.size()), label.data());
         }
-        drawAlgorithm(dl, ImVec2(p.x + t * 0.08f, p.y + t * 0.06f), ImVec2(p.x + t * 0.92f, p.y + t * 0.76f),
+        drawAlgorithm(dl, ImVec2(p.x + t * 0.08f, p.y + t * 0.06f), ImVec2(p.x + t * 0.92f, p.y + t * 0.62f),
                       synth::kAlgorithms[static_cast<std::size_t>(k)], nullptr, false);
         ImGui::PopID();
     }
@@ -426,8 +453,8 @@ void operatorPanel(EditorModel& m, EditorState& st, int op)
     ImGui::TextColored(ImVec4(0.67f, 0.68f, 0.72f, 1.0f), "%s", role);
     envelopeSketch(patch.ops[static_cast<std::size_t>(op)].env, carrier ? kAccent : kModulator);
     // Field order chosen for playing, not table order: pitch, level, envelope, scaling, then the rarer ones.
-    static constexpr F kOrder[] = {F::Ratio,   F::Detune, F::Level,  F::Feedback, F::Attack, F::Decay, F::Sustain,
-                                   F::Release, F::VelSens, F::KeyLevel, F::KeyRate, F::Fixed, F::FixedHz};
+    static constexpr F kOrder[] = {F::Wave,    F::Ratio,   F::Detune,  F::Level,    F::Feedback, F::Attack, F::Decay,
+                                   F::Sustain, F::Release, F::VelSens, F::KeyLevel, F::KeyRate,  F::Fixed,  F::FixedHz};
     std::vector<std::size_t> items;
     for (F f : kOrder)
         items.push_back(indexOfId(synth::param_id::op(op, f)));
@@ -631,7 +658,7 @@ void drawEditor(EditorModel& m, EditorState& st)
 
     const ImGuiStyle& style = ImGui::GetStyle();
     const ImVec2 avail = ImGui::GetContentRegionAvail();
-    const float leftW = avail.x * 0.19f, rightW = avail.x * 0.26f;
+    const float leftW = avail.x * 0.205f, rightW = avail.x * 0.26f; // L4.2: wide enough for 'Glide legato'
     const float opW = (avail.x - leftW - rightW - style.ItemSpacing.x * 5.0f) / 4.0f;
     const ImGuiChildFlags panel = ImGuiChildFlags_Borders;
 

@@ -22,6 +22,7 @@ void renderL2_5(const std::filesystem::path& outDir); // l2_5.cpp: legato/mono/p
 void renderL2_6(const std::filesystem::path& outDir); // l2_6.cpp: CPU per voice, hot spots, denormals (console)
 void renderL3_4(const std::filesystem::path& outDir); // l3_4.cpp: factory bank files + a render of every preset
 void renderL4_1(const std::filesystem::path& outDir); // l4_1.cpp: mod matrix pads, host poly-mod
+void renderL4_2(const std::filesystem::path& outDir); // l4_2.cpp: operator waveforms, FM aliasing 1x/2x, VA/TX presets
 void renderL4_4(const std::filesystem::path& outDir); // l4_4.cpp: unison pads, mono check, CPU
 void renderL5_1(const std::filesystem::path& outDir); // l5_1.cpp: FX slot switching (clicks), D16 dispatch timing
 void renderL5_2(const std::filesystem::path& outDir); // l5_2.cpp: drive, oversampling, aliasing, latency, bitcrush

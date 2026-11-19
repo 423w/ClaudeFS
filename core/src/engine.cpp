@@ -24,14 +24,19 @@ void Engine::prepare(double sampleRate, int maxBlockSize, float stealFadeMs)
     const float gainMs = smoothing_ ? synth::findParam(synth::param_id::kOutputDb)->smoothingMs : 0.0f;
     const float cutoffMs = smoothing_ ? synth::findParam(synth::param_id::kCutoff)->smoothingMs : 0.0f;
     const float qMs = smoothing_ ? synth::findParam(synth::param_id::kResonance)->smoothingMs : 0.0f;
+    stealFadeMs_ = stealFadeMs;
+    levelMs_ = levelMs;
+    fmFactor_ = requestedFmFactor(); // L4.2: preparing is a restart, so the FM rate (and its latency) may change
     for (synth::Voice& v : voices_)
-        v.prepare(sampleRate, stealFadeMs, levelMs);
+        v.prepare(sampleRate, stealFadeMs, levelMs, fmFactor_);
     matrixK_ = matrixMs > 0.0f ? static_cast<float>(1.0 - std::exp(-1.0 / (matrixMs * 0.001 * sampleRate))) : 1.0f;
     fx_.prepare(sampleRate, maxBlockSize, gainMs); // allocates: effect buffers and slot scratch
     fx_.setTempo(tempoBpm_);
     fx_.setParams(patch_.fx);
     fx_.commitLatency(); // L5.2: preparing is a restart, the one moment the latency may change
     cutoffOctaves_.prepare(sampleRate, cutoffMs);
+    for (dsp::OnePoleSmoother& a : slotAmount_)
+        a.prepare(sampleRate, smoothing_ ? 20.0f : 0.0f);
     q_.prepare(sampleRate, qMs);
     lfo2_.prepare(sampleRate);
     lfo1Reference_.prepare(sampleRate);
@@ -56,18 +61,55 @@ void Engine::rebuildRouting() noexcept
     routing_.add(ModSrc::Lfo1, ModSrc::ModWheel, ModDst::Pitch, r.wheelVibratoSemitones); // "Wheel > vib"
     routing_.add(ModSrc::Lfo2, ModSrc::None, ModDst::Cutoff, r.lfo2CutoffOctaves);     // "LFO2 > cutoff"
     routing_.add(ModSrc::Lfo2, ModSrc::None, ModDst::Index, r.lfo2IndexAmount);        // "LFO2 > index"
-    for (const synth::ModSlotParams& s : patch_.mod.slots)
-        routing_.add(s.src, s.via, s.dst, s.amountPct * 0.01f * synth::kModDests[synth::idx(s.dst)].range);
+    for (std::size_t k = 0; k < patch_.mod.slots.size(); ++k) {
+        const synth::ModSlotParams& s = patch_.mod.slots[k];
+        routing_.add(s.src, s.via, s.dst, slotAmount_[k].value() * 0.01f * synth::kModDests[synth::idx(s.dst)].range);
+    }
+}
+
+void Engine::commitLatency() noexcept
+{
+    fx_.commitLatency();
+    if (const int f = requestedFmFactor(); f != fmFactor_) {
+        // A new rate for every voice's FM core: re-prepare them (no allocation) and stop what's sounding: a running
+        // note can't change its rate mid-way. Standalone/offline only; a plugin host restarts us first.
+        fmFactor_ = f;
+        for (synth::Voice& v : voices_)
+            v.prepare(sampleRate_, stealFadeMs_, levelMs_, fmFactor_);
+        monoVoice_ = nullptr;
+    }
+}
+
+void Engine::glideSlotAmounts() noexcept
+{
+    bool moving = false;
+    for (dsp::OnePoleSmoother& a : slotAmount_) {
+        const float before = a.value();
+        (void)a.tick();
+        // Land exactly on the target once within 0.01 % of the range, or once a step no longer moves the value:
+        // a one-pole in float gets STUCK short of its target (here ~0.002 % below it: (target − value)·k rounds to
+        // nothing), and a glide that never ends would recompile the routing every sample forever. (Found by the
+        // test that checks the glide arrives.)
+        if (std::abs(a.value() - a.target()) < 1e-2f || a.value() == before)
+            a.reset(a.target());
+        else
+            moving = true;
+    }
+    slotsGliding_ = moving;
+    rebuildRouting();
 }
 
 void Engine::setPatch(const synth::Patch& patch) noexcept
 {
     patch_ = patch;
+    for (std::size_t k = 0; k < slotAmount_.size(); ++k) // a whole new patch: its amounts at once, no glide
+        slotAmount_[k].reset(patch_.mod.slots[k].amountPct);
+    slotsGliding_ = false;
     rebuildRouting();
     live_ = patch.algorithm;
     liveSettling_ = false;
     fx_.setParams(patch.fx);
-    fx_.commitLatency(); // L5.2: offline or while the plugin activates (the host re-reads the latency after that)
+    commitLatency(); // L5.2/L4.2: offline or while the plugin activates (the host re-reads the latency after that)
     fx_.snapOutputDb(patch.outputDb);
     fx_.reset(); // a whole new patch: no fades from the old one, and no old echoes
     cutoffOctaves_.reset(std::log2(patch.filter.cutoffHz));
@@ -103,6 +145,9 @@ void Engine::reset() noexcept
     monoVoice_ = nullptr;
     hasLastPitch_ = false;
     hostGlobal_.fill(0.0f);
+    for (std::size_t k = 0; k < slotAmount_.size(); ++k)
+        slotAmount_[k].reset(patch_.mod.slots[k].amountPct);
+    slotsGliding_ = false;
     rebuildRouting();
     restartLfos();
 }
@@ -238,6 +283,11 @@ void Engine::paramChange(const Event& e) noexcept
             if (v.busy())
                 v.refreshLevels(); // glides via each operator's smoother
         break;
+    case synth::ParamTarget::OpWave: // L4.2
+        for (synth::Voice& v : voices_)
+            if (v.busy())
+                v.refreshWaves();
+        break;
     case synth::ParamTarget::OpFreq:
     case synth::ParamTarget::Tuning:
         for (synth::Voice& v : voices_)
@@ -264,6 +314,10 @@ void Engine::paramChange(const Event& e) noexcept
         if (!deferLatency_ && fx_.latencyPending())
             fx_.commitLatency();
         break;
+    case synth::ParamTarget::FmQuality: // L4.2: the same rule for the voices' FM rate
+        if (!deferLatency_ && requestedFmFactor() != fmFactor_)
+            commitLatency();
+        break;
     case synth::ParamTarget::FilterCutoff:
         // Smoothed in octaves, not Hz: a glide from 100 Hz to 10 kHz then moves evenly *as heard*,
         // instead of spending almost all of its time in the top octave.
@@ -276,6 +330,13 @@ void Engine::paramChange(const Event& e) noexcept
         rebuildRouting(); // the four L1.11 route depths are LFO parameters, and fixed matrix slots (L4.1)
         break;
     case synth::ParamTarget::ModMatrix:
+        // Source, via and destination switch at once (menus); amounts glide (L4.2): new targets here, the glide
+        // in render(). A slot whose amount didn't change gets the same target and doesn't move.
+        for (std::size_t k = 0; k < slotAmount_.size(); ++k) {
+            slotAmount_[k].setTarget(patch_.mod.slots[k].amountPct);
+            if (slotAmount_[k].value() != slotAmount_[k].target())
+                slotsGliding_ = true;
+        }
         rebuildRouting();
         break;
     case synth::ParamTarget::Filter:
@@ -473,6 +534,8 @@ void Engine::render(float* outL, float* outR, int from, int to) noexcept
     for (int i = from; i < to; ++i) {
         if (liveSettling_)
             settleMatrix();
+        if (slotsGliding_)
+            glideSlotAmounts();
         // Global modulation, computed once per sample for all voices (L1.11; through the matrix since L4.1):
         // the global sources, then the slots whose source and via are both global.
         (void)lfo1Reference_.tick();

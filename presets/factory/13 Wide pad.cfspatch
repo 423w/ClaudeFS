@@ -43,6 +43,7 @@ name = Wide pad
 51 = 0              # Glide [ms]
 52 = 1              # Glide legato (On)
 53 = 0              # Priority (Last)
+54 = 0              # FM 2x (Off)
 
 # Unison
 60 = 4              # Unison
@@ -169,6 +170,7 @@ name = Wide pad
 1010 = 0.7          # Sustain
 1011 = 1500         # Release [ms]
 1012 = 0            # Feedback
+1013 = 0            # Wave (Sine)
 
 # Operator B
 1100 = 1            # Ratio [x]
@@ -184,6 +186,7 @@ name = Wide pad
 1110 = 0.9          # Sustain
 1111 = 1800         # Release [ms]
 1112 = 0            # Feedback
+1113 = 0            # Wave (Sine)
 
 # Operator C
 1200 = 3            # Ratio [x]
@@ -199,6 +202,7 @@ name = Wide pad
 1210 = 0.6          # Sustain
 1211 = 1500         # Release [ms]
 1212 = 0            # Feedback
+1213 = 0            # Wave (Sine)
 
 # Operator D
 1300 = 1            # Ratio [x]
@@ -214,5 +218,6 @@ name = Wide pad
 1310 = 0.9          # Sustain
 1311 = 2000         # Release [ms]
 1312 = 0            # Feedback
+1313 = 0            # Wave (Sine)
 
 end

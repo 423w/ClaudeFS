@@ -244,6 +244,88 @@ inline Patch bellHall()
     return p;
 }
 
+/// Saw lead (L4.2): FSS as a subtractive synth. Two saw CARRIERS (algorithm 5 with both modulators silent), 12
+/// cents apart, into a resonant low-pass whose envelope opens on every note; legato with a short glide and a
+/// delayed vibrato. The classic monophonic VA lead, with no FM at all.
+inline Patch sawLead()
+{
+    using util::Cents;
+    Patch p;
+    p.algorithm = kAlgorithms[4];
+    p.algorithmNumber = 5;
+    const dsp::AdsrParams amp{.attackMs = 3.0f, .decayMs = 600.0f, .sustain = 0.85f, .releaseMs = 180.0f};
+    p.ops[0].level = p.ops[2].level = 0.0f;
+    p.ops[1] = {.detune = Cents{-6.0}, .level = 1.0f, .velSens = 0.3f, .env = amp, .wave = 6};
+    p.ops[3] = {.detune = Cents{6.0}, .level = 1.0f, .velSens = 0.3f, .env = amp, .wave = 6};
+    p.filter = {.mode = FilterMode::LowPass, .cutoffHz = 900.0f, .q = 2.5f, .envOctaves = 3.5f, .keyTrack = 0.5f,
+                .velOctaves = 1.0f, .env = {.attackMs = 2.0f, .decayMs = 350.0f, .sustain = 0.25f, .releaseMs = 200.0f}};
+    p.voice = {.mode = VoiceMode::Legato, .glideMs = 70.0f};
+    p.lfo1 = {.rateHz = 5.5f, .shape = dsp::LfoShape::Sine, .delayMs = 300.0f, .fadeMs = 400.0f, .keySync = true};
+    p.routes.vibratoSemitones = 0.12f;
+    p.fx.delay = {.enabled = true, .feedbackPct = 30.0f, .mixPct = 18.0f};
+    p.outputDb = util::gainToDb(0.5f);
+    return p;
+}
+
+/// Supersaw (L4.2, the patch L4.4's unison was waiting for): ONE saw carrier (algorithm 1, the three modulators
+/// silent) times 7 unison copies spread over 40 cents and the full stereo width: seven detuned saws per note, the
+/// trance/"JP" pad and lead. A gentle key-tracked low-pass takes the edge off, and a little hall glues it.
+inline Patch supersaw()
+{
+    Patch p;
+    p.algorithm = kAlgorithms[0];
+    p.ops[0].level = p.ops[1].level = p.ops[2].level = 0.0f;
+    p.ops[3] = {.level = 1.0f, .velSens = 0.2f,
+                .env = {.attackMs = 8.0f, .decayMs = 300.0f, .sustain = 1.0f, .releaseMs = 450.0f}, .wave = 6};
+    p.unison = {.voices = 7, .detuneCents = 40.0f, .widthPct = 100.0f};
+    p.filter = {.mode = FilterMode::LowPass, .cutoffHz = 6000.0f, .q = 0.7071f, .keyTrack = 0.3f};
+    p.fx.reverb = {.enabled = true, .decayS = 2.5f, .predelayMs = 15.0f, .mixPct = 20.0f};
+    p.outputDb = util::gainToDb(0.18f); // measured (l4.2): 0.35 drove a 4-note chord into the soft clip
+    return p;
+}
+
+/// Wave bass (L4.2, TX81Z-style): the sine variants doing what they did on Yamaha's 4-op synths. Algorithm 5:
+/// an Abs sine modulator (an octave-up spectrum, with feedback) plucks a Half sine carrier (soft, even
+/// harmonics); a Camel at ratio 2 adds a short, bright attack to a sine sub-carrier.
+inline Patch waveBass()
+{
+    using util::Ratio;
+    Patch p;
+    p.algorithm = kAlgorithms[4];
+    p.algorithmNumber = 5;
+    p.ops[0] = {.level = 1.6f, .velSens = 0.6f, .env = {.attackMs = 1.0f, .decayMs = 180.0f, .sustain = 0.15f, .releaseMs = 80.0f},
+                .wave = 2};
+    p.ops[1] = {.level = 1.0f, .velSens = 0.3f, .env = {.attackMs = 1.0f, .decayMs = 900.0f, .sustain = 0.6f, .releaseMs = 120.0f},
+                .wave = 1};
+    p.ops[2] = {.ratio = Ratio{2.0}, .level = 0.9f, .velSens = 0.7f,
+                .env = {.attackMs = 1.0f, .decayMs = 90.0f, .sustain = 0.0f, .releaseMs = 60.0f}, .wave = 5};
+    p.ops[3] = {.level = 0.5f, .env = {.attackMs = 1.0f, .decayMs = 400.0f, .sustain = 0.4f, .releaseMs = 100.0f}};
+    p.algorithm.mod[0][0] = 0.4f;
+    p.outputDb = util::gainToDb(0.9f); // measured (l3.4): 0.5 peaked at only -9.8 dBFS
+    return p;
+}
+
+/// Wave clav (L4.2, TX81Z-style): a percussive keyboard from the "nasal" waves. An Alt sine carrier struck by a
+/// Quarter sine modulator at ratio 3 (bright, its index dies in ~120 ms), plus a quiet Square carrier tickled by a
+/// short ratio-7 sine for the pick. Velocity opens the brightness.
+inline Patch waveClav()
+{
+    using util::Ratio;
+    Patch p;
+    p.algorithm = kAlgorithms[4];
+    p.algorithmNumber = 5;
+    p.ops[0] = {.ratio = Ratio{3.0}, .level = 1.4f, .velSens = 0.8f,
+                .env = {.attackMs = 1.0f, .decayMs = 120.0f, .sustain = 0.2f, .releaseMs = 60.0f}, .wave = 3};
+    p.ops[1] = {.level = 1.0f, .velSens = 0.4f, .env = {.attackMs = 1.0f, .decayMs = 600.0f, .sustain = 0.3f, .releaseMs = 60.0f},
+                .wave = 4};
+    p.ops[2] = {.ratio = Ratio{7.0}, .level = 0.6f, .velSens = 0.8f,
+                .env = {.attackMs = 1.0f, .decayMs = 30.0f, .sustain = 0.0f, .releaseMs = 30.0f}};
+    p.ops[3] = {.level = 0.35f, .velSens = 0.5f, .env = {.attackMs = 1.0f, .decayMs = 300.0f, .sustain = 0.2f, .releaseMs = 60.0f},
+                .wave = 7};
+    p.outputDb = util::gainToDb(0.5f);
+    return p;
+}
+
 /// The factory list hosts show (fss_play, the plugin editor). Since L3.4 the factory bank also exists as
 /// text files in presets/factory/ (written from these functions by `fss_render l3.4`; a test checks that
 /// the files and these functions agree), so the files are what users read, copy and edit.
@@ -266,6 +348,10 @@ inline constexpr NamedPreset kFactoryPresets[] = {
     {"Evolving matrix", evolvingMatrix}, // L4.1
     {"Wide pad", widePad},               // L4.4
     {"Bell hall", bellHall},             // L5.5
+    {"Saw lead", sawLead},               // L4.2
+    {"Supersaw", supersaw},              // L4.2
+    {"Wave bass", waveBass},             // L4.2
+    {"Wave clav", waveClav},             // L4.2
     {"Init", [] { return Patch{}; }},
 };
 

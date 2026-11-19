@@ -15,7 +15,10 @@
 cmake_minimum_required(VERSION 3.25)
 
 project(CFS
-    VERSION 0.5.5 # branch.lesson of the last finished lesson; the plugin reports it to the host
+    # The plugin reports it to the host. Until 0.5.5 it was "branch.lesson of the last finished lesson"; since
+    # L4.2 (whose number is lower than L5.5's) it only ever increases: the minor number goes up by one per lesson,
+    # the patch number for fixes in between. Which lesson a version is: docs/DECISIONS.md, "versioning".
+    VERSION 0.6.0
     DESCRIPTION "Claude's build of FirstStreetSynthesis, an FM-core hybrid synth"
     LANGUAGES CXX)
 

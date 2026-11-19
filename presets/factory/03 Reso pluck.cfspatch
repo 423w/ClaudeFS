@@ -43,6 +43,7 @@ name = Reso pluck
 51 = 0              # Glide [ms]
 52 = 1              # Glide legato (On)
 53 = 0              # Priority (Last)
+54 = 0              # FM 2x (Off)
 
 # Unison
 60 = 1              # Unison
@@ -169,6 +170,7 @@ name = Reso pluck
 1010 = 0.7          # Sustain
 1011 = 300          # Release [ms]
 1012 = 0            # Feedback
+1013 = 0            # Wave (Sine)
 
 # Operator B
 1100 = 1            # Ratio [x]
@@ -184,6 +186,7 @@ name = Reso pluck
 1110 = 0.7          # Sustain
 1111 = 300          # Release [ms]
 1112 = 0            # Feedback
+1113 = 0            # Wave (Sine)
 
 # Operator C
 1200 = 1            # Ratio [x]
@@ -199,6 +202,7 @@ name = Reso pluck
 1210 = 0.8          # Sustain
 1211 = 200          # Release [ms]
 1212 = 1            # Feedback
+1213 = 0            # Wave (Sine)
 
 # Operator D
 1300 = 1            # Ratio [x]
@@ -214,5 +218,6 @@ name = Reso pluck
 1310 = 0.5          # Sustain
 1311 = 250          # Release [ms]
 1312 = 0            # Feedback
+1313 = 0            # Wave (Sine)
 
 end

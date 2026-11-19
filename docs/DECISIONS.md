@@ -545,6 +545,39 @@ diffuser stages; SIMD over the 8 lines is natural: L6.2).
 lines and public domain), or they prefer a reverb with a smaller, Valhalla-style "character" parameter set over
 physical units.
 
+### 2026-11-19: L4.2 operator waveforms & FM oversampling (CFS; not a numbered decision)
+**Decision.** (1) Each operator has a **Wave** (9, append-only): Sine (bit-identical to before), five sine-table
+variants (half, abs, quarter, alt, camel), and PolyBLEP saw/square/triangle. (2) All waves are **zero-mean** (their
+exact mean subtracted). (3) The sine variants stay **naive** (like the chips); the VA shapes are band-limited with
+the **instantaneous** phase step (modulation included), falling back to naive when it leaves [0, ½]. (4) **FM 2x**:
+a global on/off that runs every voice's FM core at twice the rate with a 63-tap halfband per voice; 16 samples of
+latency, handled by L5.2's restart rule; default off. (5) **Ratio snapping lives in the editor** (1/8, 1/4, 1/2,
+1..32; Ctrl = free); the parameter stays continuous.
+**Options considered.** Band-limited sine variants; waves with their DC; naive VA shapes; 2x only in the
+measurement tool; oversampling the whole voice; DX7-style coarse/fine ratio parameters.
+**Why.** Zero-mean, because a carrier with DC thumps. Naive variants, because they're mostly modulators (where
+aliasing hides in the sidebands) and FM 2x covers the bright-carrier case. The instantaneous step kept ~15 dB of
+PolyBLEP's gain even at index 3. FM 2x gains 18–55 dB of audible aliasing from C5 up at exactly 2x the FM cost;
+the filter and envelopes don't need it. Snapping in the editor gives harmonic ratios by default without changing
+the parameter contract.
+**Revisit if:** bright naive carriers are wanted up high (band-limit the quarter sine first: it's the worst); a
+4x FM core is needed for C8 (add the drive's second stage); the per-copy `setFrequency` cost matters (a pitch ratio
+inside the operator).
+**The owner might choose differently if:** they want the chips' exact waveforms, DC included (authenticity over
+headroom); they prefer DX7-style coarse/fine ratios (what hardware users know); or they'd oversample always and
+hide it (simpler UI, double the CPU).
+
+### 2026-11-19: Versioning (CFS; not a numbered decision)
+**Decision.** From L4.2 on, the version **only increases**: 0.6.0 = L4.2, then +0.1 per lesson (0.7.0, 0.8.0...),
++0.0.1 for fixes between lessons. Until then it was "branch.lesson": 0.4.4 = L4.4, 0.5.2 = L5.2, 0.5.5 = L5.5.
+**Options considered.** Keep "version = lesson number" even when it goes down (0.5.5 → 0.4.2); always increasing.
+**Why.** Hosts, plugin managers and (L6.5) installers assume a newer build has a higher version: FL Studio's plugin
+database and a Windows installer may refuse to "downgrade" 0.5.5 to 0.4.2, or keep the old one. The lesson a build
+belongs to is recorded here and in each lesson's commit message instead.
+**Revisit if:** L6.5 (shipping) picks a public scheme (1.0.0 for the first release).
+**The owner might choose differently if:** they value reading the lesson straight off the version and never install
+over an older build (then 0.4.2 after 0.5.5 is harmless in practice).
+
 <!-- Append entries like:
 ### 2026-11-20: D5 decided: double phase in [0,1)
 Why: ...

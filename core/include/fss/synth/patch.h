@@ -44,6 +44,7 @@ struct OperatorParams {
     float keyLevelDbPerOct = 0.0f;// attenuation per octave above the breakpoint (positive = quieter up high)
     float keyRateScale = 0.0f;    // 1 = envelope times halve per octave above (double per octave below)
     dsp::AdsrParams env{};
+    std::uint8_t wave = 0;        // dsp::OpWave (L4.2): 0 = sine, the operator of before L4.2
 };
 
 /// The per-voice filter after the operators (L1.10). Off by default, so patches designed before L1.10
@@ -113,6 +114,7 @@ struct VoiceParams {
     float glideMs = 0.0f;          // portamento time, constant per glide (0 = off)
     bool glideLegatoOnly = true;   // glide only into notes played while another is held (connected phrases)
     NotePriority priority = NotePriority::Last; // mono/legato: which held key sounds
+    std::uint8_t fmOversampling = 0; // L4.2: 0 = the FM core at the sample rate, 1 = at twice it (see voice.h)
 };
 
 struct Patch {

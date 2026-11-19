@@ -15,6 +15,7 @@
 #pragma once
 
 #include <fss/dsp/adsr.h>
+#include <fss/dsp/halfband.h>
 #include <fss/dsp/lfo.h>
 #include <fss/dsp/svf.h>
 #include <fss/synth/fm_voice.h>
@@ -78,10 +79,15 @@ static_assert(static_cast<int>(FilterMode::LowPass) == static_cast<int>(dsp::Svf
 
 class Voice {
 public:
-    void prepare(double sampleRate, float stealFadeMs, float levelSmoothingMs = 5.0f) noexcept
+    /// fmFactor (L4.2): 1, or 2 = the FM core (every unison copy's operators) runs at twice the sample rate and
+    /// a halfband decimator brings it down; everything after it (filter, amp, fade) stays at the sample rate.
+    void prepare(double sampleRate, float stealFadeMs, float levelSmoothingMs = 5.0f, int fmFactor = 1) noexcept
     {
+        fmFactor_ = fmFactor == 2 ? 2 : 1;
         for (FmVoice& f : fm_)
-            f.prepare(sampleRate, levelSmoothingMs);
+            f.prepare(sampleRate * fmFactor_, levelSmoothingMs);
+        for (dsp::Halfband<63>* d : {&downL_, &downR_})
+            d->design(9.6);
         for (UnisonCopy& c : copy_) { // 20 ms: a count change fades a copy in or out; detune/pan glide
             c.gain.prepare(sampleRate, 20.0f);
             c.detune.prepare(sampleRate, 20.0f);
@@ -101,6 +107,7 @@ public:
     {
         for (FmVoice& f : fm_)
             f.reset();
+        resetDecimators();
         filterEnv_.reset();
         modEnv_.reset();
         svf_.reset();
@@ -121,6 +128,7 @@ public:
                dsp::Phase lfo1Phase = 0) noexcept
     {
         patch_ = &patch;
+        resetDecimators(); // L4.2: a 2x voice must not replay the slot's previous note through its filter
         // Unison (L4.4): every copy starts the note; copy 0 at phase 0 (as before L4.4), the others at random
         // phases, so N copies don't start as one N-times-louder waveform. The layout snaps (no glide).
         target_ = copies_ = std::clamp<int>(patch.unison.voices, 1, kMaxUnison);
@@ -217,6 +225,11 @@ public:
     {
         for (int k = 0; k < copies_; ++k)
             fm_[static_cast<std::size_t>(k)].refreshLevels();
+    }
+    void refreshWaves() noexcept // L4.2
+    {
+        for (int k = 0; k < copies_; ++k)
+            fm_[static_cast<std::size_t>(k)].refreshWaves();
     }
 
     /// Unison settings changed while the note sounds (L4.4): new copies start as clones of copy 0 (same
@@ -331,19 +344,42 @@ public:
         const bool mono = copies_ == 1 && unisonCentred() && panMod == 0.0f;
         if (mono) {
             fm_[0].setPitchOffset(pitchOffset);
-            yl = yr = fm_[0].tick(*alg);
+            if (fmFactor_ == 1) {
+                yl = yr = fm_[0].tick(*alg);
+            } else { // L4.2: two FM samples at 2x, one out of the decimator
+                const float e = fm_[0].tick(*alg);
+                const float o = fm_[0].tick(*alg);
+                yl = yr = decimate(downL_, padL_, e, o);
+            }
         } else {
             if (!stereo_) { // entering stereo: the right filter takes over the left one's state (no click)
                 svfR_ = svf_;
+                downR_ = downL_; // ... and the right decimator the left one's (L4.2)
+                padR_ = padL_;
                 stereo_ = true;
             }
+            // Per copy, once per sample: its smoothers, pitch and pan gains (at 2x they serve both FM samples).
+            std::array<float, kMaxUnison> gL{}, gR{};
             float power = 0.0f;
+            double base = 0.0; // 2^(pitchOffset/12), computed at most once per sample, only if a copy needs it
+            bool haveBase = false;
             for (int k = 0; k < copies_; ++k) {
                 UnisonCopy& c = copy_[static_cast<std::size_t>(k)];
                 const float gk = c.gain.tick(), dk = c.detune.tick(), pk = c.pan.tick();
                 FmVoice& f = fm_[static_cast<std::size_t>(k)];
-                f.setPitchOffset(pitchOffset + dk);
-                const float y = f.tick(*alg);
+                // Pitch: the voice's ratio times the copy's detune ratio (cached: the detune only moves while the
+                // unison layout glides). One pow2 per voice instead of one per copy (L4.4's open item).
+                if (const float semis = pitchOffset + dk; semis != f.pitchOffset()) {
+                    if (!haveBase) {
+                        base = util::pow2(static_cast<double>(pitchOffset) / 12.0);
+                        haveBase = true;
+                    }
+                    if (dk != c.lastDetune) {
+                        c.detuneRatio = util::pow2(static_cast<double>(dk) / 12.0);
+                        c.lastDetune = dk;
+                    }
+                    f.setPitchOffsetRatio(semis, base * c.detuneRatio);
+                }
                 // Constant-power pan, scaled by √2 so a centred copy has gain 1 (the mono level): see the journal.
                 const float pan = std::clamp(pk + panMod, -1.0f, 1.0f);
                 if (pan != c.lastPan) {
@@ -352,9 +388,27 @@ public:
                     c.gr = std::numbers::sqrt2_v<float> * std::sin(th);
                     c.lastPan = pan;
                 }
-                yl += gk * c.gl * y;
-                yr += gk * c.gr * y;
+                gL[static_cast<std::size_t>(k)] = gk * c.gl;
+                gR[static_cast<std::size_t>(k)] = gk * c.gr;
                 power += gk * gk;
+            }
+            // Then the FM copies themselves: once at 1x, twice (and decimated) at 2x.
+            auto sumCopies = [&](float& l, float& r) {
+                l = r = 0.0f;
+                for (int k = 0; k < copies_; ++k) {
+                    const float y = fm_[static_cast<std::size_t>(k)].tick(*alg);
+                    l += gL[static_cast<std::size_t>(k)] * y;
+                    r += gR[static_cast<std::size_t>(k)] * y;
+                }
+            };
+            if (fmFactor_ == 1) {
+                sumCopies(yl, yr);
+            } else {
+                float l0 = 0.0f, r0 = 0.0f, l1 = 0.0f, r1 = 0.0f;
+                sumCopies(l0, r0);
+                sumCopies(l1, r1);
+                yl = decimate(downL_, padL_, l0, l1);
+                yr = decimate(downR_, padR_, r0, r1);
             }
             // Copies at random phases are uncorrelated: normalize by power, so N copies are as loud as one.
             const float norm = power > 1e-9f ? 1.0f / std::sqrt(power) : 0.0f;
@@ -414,6 +468,8 @@ private:
     struct UnisonCopy {
         dsp::OnePoleSmoother gain{}, detune{}, pan{}; // gain 0..1, detune in semitones, pan −1..1
         float lastPan = 2.0f, gl = 1.0f, gr = 1.0f;   // cached pan gains (recomputed only when the pan moves)
+        float lastDetune = 0.0f;                       // L4.2: the detune ratio's cache key ...
+        double detuneRatio = 1.0;                      // ... and 2^(detune/12)
     };
 
     /// Targets for every copy from the unison settings; `snap` = jump there (note start).
@@ -462,7 +518,25 @@ private:
             stereo_ = false; // back to mono: the next sample takes the mono path (L and R were equal by then)
     }
 
+    /// One 2x-rate pair through a decimator, plus one 2x sample of padding: the halfband alone delays by 15.5
+    /// base samples, the padding makes it a whole 16 (the latency the Engine reports, dsp/halfband.h).
+    [[nodiscard]] static float decimate(dsp::Halfband<63>& d, float& pad, float even, float odd) noexcept
+    {
+        const float y = d.down(pad, even);
+        pad = odd;
+        return y;
+    }
+    void resetDecimators() noexcept
+    {
+        downL_.reset();
+        downR_.reset();
+        padL_ = padR_ = 0.0f;
+    }
+
     std::array<FmVoice, kMaxUnison> fm_{}; // unison copies (L4.4); copy 0 is the voice of before L4.4
+    int fmFactor_ = 1;                      // L4.2: the FM core's rate, 1x or 2x
+    dsp::Halfband<63> downL_, downR_;       // L4.2: 2x → 1x, one per channel
+    float padL_ = 0.0f, padR_ = 0.0f;
     std::array<UnisonCopy, kMaxUnison> copy_{};
     int copies_ = 1, target_ = 1; // copies running (incl. fading out), and the count asked for
     bool stereo_ = false;         // last sample took the stereo path (svfR_ in use)

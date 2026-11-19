@@ -56,10 +56,16 @@ public:
     /// for that restart. With defer off (the default: the standalone app, offline renders and tests, where nothing
     /// compensates anyway), the new factor applies at the parameter change itself.
     void setDeferLatencyChanges(bool on) noexcept { deferLatency_ = on; }
-    /// The delay of the output, in samples, as configured now.
-    [[nodiscard]] int latencySamples() const noexcept { return fx_.latencySamples(); }
+    /// The delay of the output, in samples, as configured now: the FX chain's plus, with FM oversampling (L4.2),
+    /// the voices' decimator (kFmOversamplingLatency).
+    [[nodiscard]] int latencySamples() const noexcept
+    {
+        return fx_.latencySamples() + (fmFactor_ == 2 ? kFmOversamplingLatency : 0);
+    }
     /// The patch asks for a different latency than the one in use (only ever true with defer on).
-    [[nodiscard]] bool latencyPending() const noexcept { return fx_.latencyPending(); }
+    [[nodiscard]] bool latencyPending() const noexcept { return fx_.latencyPending() || requestedFmFactor() != fmFactor_; }
+    /// L4.2: a voice's 2x → 1x halfband (63 taps) plus one 2x sample of padding.
+    static constexpr int kFmOversamplingLatency = (dsp::Halfband<63>::kCenter + 1) / 2;
     /// A/B demos only (L2.6): false leaves the thread's denormal mode alone inside process().
     void setFlushDenormals(bool on) noexcept { flushDenormals_ = on; }
     [[nodiscard]] const synth::Patch& patch() const noexcept { return patch_; }
@@ -104,6 +110,9 @@ private:
     void settleMatrix() noexcept;
     void restartLfos() noexcept;
     void rebuildRouting() noexcept;           // L4.1: patch (routes + slots) → the compiled mod routing
+    void glideSlotAmounts() noexcept;         // L4.2: one step of the slot-amount smoothing, then recompile
+    void commitLatency() noexcept;            // L5.2/L4.2: apply the FX chain's and the voices' requested rates
+    [[nodiscard]] int requestedFmFactor() const noexcept { return patch_.voice.fmOversampling >= 1 ? 2 : 1; }
     void paramMod(const Event& e) noexcept;   // L4.1: CLAP polyphonic modulation
     [[nodiscard]] synth::Voice* findFreeVoice() noexcept;
     [[nodiscard]] synth::Voice* chooseVictim() noexcept;
@@ -123,9 +132,15 @@ private:
     synth::ModValues globalSrc_{};   // L4.1: this sample's global source values
     synth::ModSums globalSums_{};    // L4.1: this sample's global slot sums
     synth::ModSums hostGlobal_{};    // L4.1: the host's all-notes modulation (PARAM_MOD with no note/key)
+    // L4.2 (an L4.1 open item): the user slots' amounts glide (20 ms) instead of stepping, so automating an amount
+    // doesn't zipper. The routing is recompiled every sample while one glides, and not at all otherwise.
+    std::array<dsp::OnePoleSmoother, synth::kNumModSlots> slotAmount_{};
+    bool slotsGliding_ = false;
     bool smoothing_ = true;
     bool flushDenormals_ = true;
     bool deferLatency_ = false;      // L5.2: see setDeferLatencyChanges
+    int fmFactor_ = 1;               // L4.2: the voices' FM core rate in use (1 or 2)
+    float stealFadeMs_ = 5.0f, levelMs_ = 5.0f; // kept for re-preparing the voices when fmFactor_ changes
     int polyphony_ = kMaxPolyphony;
     double sampleRate_ = 48000.0;
     float bend_ = 0.0f;

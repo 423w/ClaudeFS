@@ -34,6 +34,7 @@ add_executable(fss_render
     l2_6.cpp
     l3_4.cpp
     l4_1.cpp
+    l4_2.cpp
     l4_4.cpp
     l5_1.cpp
     l5_2.cpp

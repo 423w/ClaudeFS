@@ -50,7 +50,15 @@ struct EditorState {
     // Tests check "every parameter has a control"; the test host uses the rectangles to click real widgets.
     std::bitset<kNumParams> drawn;
     std::array<std::array<float, 4>, kNumParams> rects{};
+    // L4.2: a knob drag keeps its own, unsnapped position, so a snapping knob (operator ratios) can still move:
+    // re-reading the snapped value every frame would pull it back into the same snap basin forever.
+    float dragNorm = 0.0f;
 };
+
+/// L4.2: the ratio a dragged Ratio knob snaps to (hold Ctrl to drag freely): 1/8, 1/4, 1/2 and the whole
+/// numbers 1..32, the nearest one as heard (by ratio, not by difference). Harmonic ratios give harmonic spectra;
+/// anything else is inharmonic (bells, metal), which is a choice you make on purpose, with Ctrl or by typing.
+[[nodiscard]] float snapRatio(float ratio) noexcept;
 
 /// The editor's pages, in button order. Page 0 is the voice (operators, filter, LFOs); page 1 the FX chain;
 /// page 2 the modulation matrix and mod envelope (L4.1).

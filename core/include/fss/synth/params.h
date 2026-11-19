@@ -57,12 +57,15 @@ enum class ParamTarget : std::uint8_t {
     ModMatrix,    // a matrix slot (L4.1): the Engine recompiles its routing (the LFO routes do too)
     ModEnv,       // the mod envelope's times/sustain (L4.1): envelopes updated (like FilterEnv)
     Unison,       // unison count / detune / width (L4.4): every sounding voice glides to the new layout
+    OpWave,       // an operator's waveform (L4.2): sounding voices switch at once
+    FmQuality,    // FM oversampling (L4.2): a new rate for every voice's FM core, and a new latency (engine.h)
 };
 
 enum class OpField : std::uint8_t { // APPEND ONLY: values are part of the stable parameter ids
     Ratio, Detune, Fixed, FixedHz, Level, VelSens, KeyLevel, KeyRate, Attack, Decay, Sustain, Release, Feedback,
+    Wave, // L4.2
 };
-inline constexpr int kNumOpFields = 13;
+inline constexpr int kNumOpFields = 14;
 
 struct ParamInfo {
     std::uint32_t id;
@@ -91,7 +94,7 @@ inline constexpr std::uint32_t kFilterMode = 10, kCutoff = 11, kResonance = 12, 
 inline constexpr std::uint32_t kLfo1Rate = 30, kLfo1Shape = 31, kLfo1Delay = 32, kLfo1Fade = 33, kLfo1KeySync = 34,
                                kVibrato = 35, kWheelVibrato = 36;
 inline constexpr std::uint32_t kLfo2Rate = 40, kLfo2Shape = 41, kLfo2Retrigger = 42, kLfo2Cutoff = 43, kLfo2Index = 44;
-inline constexpr std::uint32_t kVoiceMode = 50, kGlide = 51, kGlideLegato = 52, kPriority = 53;
+inline constexpr std::uint32_t kVoiceMode = 50, kGlide = 51, kGlideLegato = 52, kPriority = 53, kFmOversampling = 54;
 inline constexpr std::uint32_t kUnisonVoices = 60, kUnisonDetune = 61, kUnisonWidth = 62; // L4.4
 inline constexpr std::uint32_t kWidthOn = 200, kWidth = 201;
 inline constexpr std::uint32_t kDelayOn = 210, kDelayTime = 211, kDelaySync = 212, kDelayDivision = 213,
@@ -140,6 +143,8 @@ inline constexpr OpFieldInfo kOpFields[kNumOpFields] = {
     {OpField::Sustain, "Sustain", "", 0.0f, 1.0f, 0.7f, Skew::Linear, 0.0f, ParamTarget::OpEnv}, // glides in Adsr
     {OpField::Release, "Release", "ms", 1.0f, 30000.0f, 300.0f, Skew::Exp, 0.0f, ParamTarget::OpEnv},
     {OpField::Feedback, "Feedback", "", 0.0f, 4.0f, 0.0f, Skew::Linear, 10.0f, ParamTarget::Feedback},
+    // L4.2: 0 Sine, 1 Half sine, 2 Abs sine, 3 Quarter sine, 4 Alt sine, 5 Camel, 6 Saw, 7 Square, 8 Triangle.
+    {OpField::Wave, "Wave", "", 0.0f, 8.0f, 0.0f, Skew::Stepped, 0.0f, ParamTarget::OpWave},
 };
 
 // MIDI CC defaults for operators: none since L1.11. (Until L1.10, CC 74 and CC 71 drove op A / op C levels;
@@ -188,6 +193,8 @@ inline constexpr ParamInfo kGlobalParams[] = {
     {param_id::kGlide, "Glide", "ms", 0.0f, 2000.0f, 0.0f, Skew::Power2, 0.0f, 5, ParamTarget::Play, -1, {}, "Voice"},
     {param_id::kGlideLegato, "Glide legato", "on/off", 0.0f, 1.0f, 1.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Play, -1, {}, "Voice"},
     {param_id::kPriority, "Priority", "", 0.0f, 2.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Play, -1, {}, "Voice"},
+    // L4.2: on = the FM core at 2x the sample rate (a halfband decimator per voice: 16 samples of latency).
+    {param_id::kFmOversampling, "FM 2x", "on/off", 0.0f, 1.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::FmQuality, -1, {}, "Voice"},
     // ---- unison (L4.4) ----
     {param_id::kUnisonVoices, "Unison", "", 1.0f, 8.0f, 1.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Unison, -1, {}, "Unison"},
     {param_id::kUnisonDetune, "Unison detune", "cents", 0.0f, 100.0f, 20.0f, Skew::Linear, 0.0f, 0, ParamTarget::Unison, -1, {}, "Unison"},

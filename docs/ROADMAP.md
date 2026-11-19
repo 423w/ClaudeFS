@@ -204,7 +204,7 @@ Modes (tell Claude which one you want):
 
 ### Branch 4: Sound Design Depth
 - [x] L4.1 Mod matrix (L1.11 routes = fixed slots, golden test; CLAP poly-mod on cutoff/resonance; FL check: docs/FL-STUDIO.md section 7)
-- [ ] L4.2 Richer operators
+- [x] L4.2 Richer operators (9 waves per operator, FM 2x, Saw lead/Supersaw/Wave bass/Wave clav; FL check: docs/FL-STUDIO.md section 7)
 - [ ] L4.3 Wavetables
 - [x] L4.4 Unison & stereo (FM-core copies, "Wide pad"; supersaw waits for L4.2; FL check: docs/FL-STUDIO.md section 7)
 - [ ] L4.5 Drive & ADAA

@@ -64,6 +64,7 @@ float getParam(const Patch& patch, const ParamInfo& p) noexcept
         case param_id::kGlide: return patch.voice.glideMs;
         case param_id::kGlideLegato: return patch.voice.glideLegatoOnly ? 1.0f : 0.0f;
         case param_id::kPriority: return static_cast<float>(patch.voice.priority);
+        case param_id::kFmOversampling: return static_cast<float>(patch.voice.fmOversampling);
         case param_id::kUnisonVoices: return static_cast<float>(patch.unison.voices);
         case param_id::kUnisonDetune: return patch.unison.detuneCents;
         case param_id::kUnisonWidth: return patch.unison.widthPct;
@@ -140,6 +141,7 @@ float getParam(const Patch& patch, const ParamInfo& p) noexcept
     case OpField::Sustain: return o.env.sustain;
     case OpField::Release: return o.env.releaseMs;
     case OpField::Feedback: return patch.algorithm.mod[i][i];
+    case OpField::Wave: return static_cast<float>(o.wave);
     }
     return p.def;
 }
@@ -197,6 +199,7 @@ void setParam(Patch& patch, const ParamInfo& p, float plain) noexcept
         case param_id::kGlide: patch.voice.glideMs = v; return;
         case param_id::kGlideLegato: patch.voice.glideLegatoOnly = v >= 0.5f; return;
         case param_id::kPriority: patch.voice.priority = static_cast<NotePriority>(static_cast<int>(v)); return;
+        case param_id::kFmOversampling: patch.voice.fmOversampling = static_cast<std::uint8_t>(v); return;
         case param_id::kUnisonVoices: patch.unison.voices = static_cast<std::uint8_t>(v); return;
         case param_id::kUnisonDetune: patch.unison.detuneCents = v; return;
         case param_id::kUnisonWidth: patch.unison.widthPct = v; return;
@@ -273,6 +276,7 @@ void setParam(Patch& patch, const ParamInfo& p, float plain) noexcept
     case OpField::Sustain: o.env.sustain = v; break;
     case OpField::Release: o.env.releaseMs = v; break;
     case OpField::Feedback: patch.algorithm.mod[i][i] = v; break;
+    case OpField::Wave: o.wave = static_cast<std::uint8_t>(v); break;
     }
 }
 
@@ -291,6 +295,8 @@ std::string_view valueLabel(const ParamInfo& p, int value) noexcept
             return value >= 0 && value < kNumModSources ? kModSources[static_cast<std::size_t>(value)].name : std::string_view{};
         }
     }
+    if (p.op >= 0 && p.field == OpField::Wave)
+        return pick({"Sine", "Half sine", "Abs sine", "Quarter sine", "Alt sine", "Camel", "Saw", "Square", "Triangle"});
     switch (p.id) {
     case param_id::kAlgorithm:
         return value >= 1 && value <= static_cast<int>(kAlgorithms.size())

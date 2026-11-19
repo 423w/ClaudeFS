@@ -212,3 +212,29 @@ Each lesson adds a subsection. Reinstall the plugin after each build (`tools\ins
      correlation measures 0.03: almost independent channels).
 6. Render with a long Decay (10 s): the export should contain the whole tail (clap.tail grows with the decay).
 7. CPU: the reverb costs about 1.3 % of a core, once for the whole instrument (it's after the voices).
+
+### L4.2: operator waves, a supersaw, FM 2x
+1. Load **Supersaw** (factory preset 16) and hold a chord, on headphones.
+   - Expect: seven detuned saws per note, wide and bright with a gentle hall: the trance/JP-8000 sound.
+   - Report: does it sound like a supersaw to you? (Try **Unison detune** 25–60 cents, **Unison** 5–8, the filter
+     **Cutoff** 3–10 kHz.) Watch FL's CPU meter on a big chord: 7 copies cost ~4–5× a plain patch.
+2. Mono: put CFS's mixer track in mono with Supersaw.
+   - Expect: narrower and about 1.6 dB quieter, no hollow sound.
+3. Load **Saw lead** (15) and play a monophonic line, overlapping notes.
+   - Expect: a classic resonant saw lead, legato with a short glide, the filter opening on each new (detached) note,
+     vibrato arriving after ~0.3 s.
+4. Load **Wave bass** (17) and **Wave clav** (18): FM made from the TX81Z-style waves.
+   - Report: do they sound "4-op Yamaha" to you? Too thin, too clicky?
+5. On any patch, open the Synth page and change an operator's **Wave** while holding a note (e.g. Init, Operator D:
+   Sine → Saw → Square → Abs sine).
+   - Expect: the timbre switches at once (a menu: a small step is normal). **Abs sine** and **Quarter sine** sound
+     an octave higher than Sine; no thump on note on/off with any wave.
+6. **Ratio snapping**: drag an operator's **Ratio** knob: it steps through 1/8, 1/4, 1/2, 1, 2, 3 ... 32. Hold
+   **Ctrl** while dragging: it moves freely (inharmonic ratios for bells). Automation and values set from FL are
+   never snapped (the snapping is only the knob's).
+7. **FM 2x** (Synth page, Voice section): load **Brass**, play C6–C8 hard, then switch **FM 2x** on.
+   - Expect: the highest notes lose a faint inharmonic whistle (aliasing), the rest sounds the same. CFS asks FL
+     for a restart (latency +16 samples, like the drive's oversampling in L5.2): report if anything glitches or if
+     the switch only takes effect after you press play again.
+8. Matrix amounts no longer step: on the Mod page, slot 1 = LFO 2 → Pitch, then automate its **Amount** with a fast
+   FL automation clip. Report whether the zipper from the L4.1 check is gone.
