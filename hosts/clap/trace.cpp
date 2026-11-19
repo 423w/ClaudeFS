@@ -91,7 +91,7 @@ void Trace::logStats(const void* instance, const AudioStats& s) noexcept
         "  audio thread summary: process %llu calls (%llu with 0 frames, %llu without buffers), frames %u..%u, "
         "flush %llu; events in: note on %llu, off %llu, choke %llu, expression %llu, midi %llu, param %llu, "
         "param mod %llu, transport %llu, other %llu; NOTE_END out %llu; event-list splits %llu; "
-        "tempo %.3f -> %.3f BPM (%llu changes)",
+        "tempo %.3f -> %.3f BPM (%llu changes); restart requests %llu",
         static_cast<unsigned long long>(s.processCalls), static_cast<unsigned long long>(s.zeroFrameCalls),
         static_cast<unsigned long long>(s.noBuffers), s.processCalls ? s.minFrames : 0u, s.maxFrames,
         static_cast<unsigned long long>(s.flushCalls), static_cast<unsigned long long>(s.noteOn),
@@ -100,7 +100,7 @@ void Trace::logStats(const void* instance, const AudioStats& s) noexcept
         static_cast<unsigned long long>(s.paramValue), static_cast<unsigned long long>(s.paramMod),
         static_cast<unsigned long long>(s.transport), static_cast<unsigned long long>(s.other),
         static_cast<unsigned long long>(s.noteEndSent), static_cast<unsigned long long>(s.eventChunks), s.firstTempo,
-        s.lastTempo, static_cast<unsigned long long>(s.tempoChanges));
+        s.lastTempo, static_cast<unsigned long long>(s.tempoChanges), static_cast<unsigned long long>(s.restartRequests));
 }
 
 } // namespace fss::plugin

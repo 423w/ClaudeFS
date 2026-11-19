@@ -29,6 +29,8 @@ void Engine::prepare(double sampleRate, int maxBlockSize, float stealFadeMs)
     matrixK_ = matrixMs > 0.0f ? static_cast<float>(1.0 - std::exp(-1.0 / (matrixMs * 0.001 * sampleRate))) : 1.0f;
     fx_.prepare(sampleRate, maxBlockSize, gainMs); // allocates: effect buffers and slot scratch
     fx_.setTempo(tempoBpm_);
+    fx_.setParams(patch_.fx);
+    fx_.commitLatency(); // L5.2: preparing is a restart, the one moment the latency may change
     cutoffOctaves_.prepare(sampleRate, cutoffMs);
     q_.prepare(sampleRate, qMs);
     lfo2_.prepare(sampleRate);
@@ -65,6 +67,7 @@ void Engine::setPatch(const synth::Patch& patch) noexcept
     live_ = patch.algorithm;
     liveSettling_ = false;
     fx_.setParams(patch.fx);
+    fx_.commitLatency(); // L5.2: offline or while the plugin activates (the host re-reads the latency after that)
     fx_.snapOutputDb(patch.outputDb);
     fx_.reset(); // a whole new patch: no fades from the old one, and no old echoes
     cutoffOctaves_.reset(std::log2(patch.filter.cutoffHz));
@@ -257,6 +260,9 @@ void Engine::paramChange(const Event& e) noexcept
         break;
     case synth::ParamTarget::Fx:
         fx_.setParams(patch_.fx); // new targets: a switch starts its 10 ms fade, a value its glide
+        // A new oversampling factor (L5.2): now, unless a plugin host has to restart us first (engine.h).
+        if (!deferLatency_ && fx_.latencyPending())
+            fx_.commitLatency();
         break;
     case synth::ParamTarget::FilterCutoff:
         // Smoothed in octaves, not Hz: a glide from 100 Hz to 10 kHz then moves evenly *as heard*,

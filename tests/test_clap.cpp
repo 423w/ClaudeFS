@@ -27,7 +27,8 @@ using plugin::FssClap;
 namespace {
 
 // ---- a fake host -------------------------------------------------------------------------------------
-int gRescans = 0, gFlushRequests = 0;
+int gRescans = 0, gFlushRequests = 0, gRestarts = 0, gLatencyChanged = 0;
+const clap_host_latency kHostLatency = {[](const clap_host_t*) { ++gLatencyChanged; }};
 const clap_host_params kHostParams = {
     [](const clap_host_t*, clap_param_rescan_flags) { ++gRescans; },
     [](const clap_host_t*, clap_id, clap_param_clear_flags) {},
@@ -36,9 +37,11 @@ const clap_host_params kHostParams = {
 const clap_host kHost = {
     CLAP_VERSION_INIT, nullptr, "tests", "CFS", "", "1",
     [](const clap_host_t*, const char* id) -> const void* {
+        if (std::strcmp(id, CLAP_EXT_LATENCY) == 0)
+            return &kHostLatency;
         return std::strcmp(id, CLAP_EXT_PARAMS) == 0 ? &kHostParams : nullptr;
     },
-    [](const clap_host_t*) {}, [](const clap_host_t*) {}, [](const clap_host_t*) {},
+    [](const clap_host_t*) { ++gRestarts; }, [](const clap_host_t*) {}, [](const clap_host_t*) {},
 };
 
 struct InList {
@@ -611,4 +614,39 @@ TEST_CASE("clap plugin: cutoff is modulatable per note, and PARAM_MOD reaches th
     CHECK(modded != untouched);
     // And a mod for a note that doesn't exist is exactly no mod: same as a third run with note 99 again.
     CHECK(untouched == run(99));
+}
+
+TEST_CASE("clap plugin: clap.latency follows the oversampling, changed only through a restart", "[clap][fx][latency]")
+{
+    // L5.2. The CLAP rule: the latency may only change inside activate(). So a new oversampling factor makes the
+    // plugin call request_restart once; the Engine keeps the old factor (and the old latency) until the host
+    // deactivates and re-activates it, and activate() then tells the host the latency changed.
+    Plugin pl;
+    const auto* lat = static_cast<const clap_plugin_latency*>(pl.p->get_extension(pl.p, CLAP_EXT_LATENCY));
+    REQUIRE(lat != nullptr);
+    CHECK(lat->get(pl.p) == 0u);
+    gRestarts = gLatencyChanged = 0;
+    InList in;
+    in.param(0, synth::param_id::kDriveOversampling, 2.0); // stepped: plain value (4x)
+    std::vector<float> l(64), r(64);
+    pl.run(64, &in, nullptr, l.data(), r.data());
+    pl.run(64, nullptr, nullptr, l.data(), r.data());
+    CHECK(gRestarts == 1); // asked once, not once per block
+    CHECK(lat->get(pl.p) == 0u);
+    CHECK(pl.impl().mainPatch().fx.drive.oversampling == 2);
+    // The host restarts us.
+    pl.p->stop_processing(pl.p);
+    pl.p->deactivate(pl.p);
+    REQUIRE(pl.p->activate(pl.p, 48000.0, 1, 4096));
+    REQUIRE(pl.p->start_processing(pl.p));
+    CHECK(gLatencyChanged == 1);
+    CHECK(lat->get(pl.p) == 37u);
+    pl.run(64, nullptr, nullptr, l.data(), r.data());
+    CHECK(gRestarts == 1); // nothing pending any more
+    // Switching the drive on or off never changes the latency (its dry path is delayed too).
+    InList on;
+    on.param(0, synth::param_id::kDriveOn, 1.0);
+    pl.run(64, &on, nullptr, l.data(), r.data());
+    CHECK(gRestarts == 1);
+    CHECK(lat->get(pl.p) == 37u);
 }

@@ -495,6 +495,31 @@ enough to use everywhere; or a host's tempo ramps make Clean's 50 ms steps audib
 path, and plenty of hardware does exactly that), or they want a fallback tempo stored in the patch so a preset
 sounds the same in a standalone app (some synths do this).
 
+### 2026-11-19: L5.2 drive & latency conventions (CFS; not a numbered decision)
+**Decision.** (1) **Latency follows the oversampling setting alone** (1× = 0, 2× = 31, 4× = 37 samples), never the
+Drive's on/off switch: the FxSlot delays its dry path by the same amount, so "off" is a pure delay and switching
+is a crossfade between aligned signals. (2) **A new latency is committed only at a restart**: the Engine applies
+a new factor at `prepare()`/`setPatch()` (and at the change itself when `setDeferLatencyChanges(false)`: standalone,
+renders, tests); the CLAP plugin defers, calls `request_restart` once, and in `activate` commits, re-reads and
+announces it (`host_latency->changed`). (3) **Linear-phase FIR halfbands** (63 + 23 taps, Kaiser), not IIR.
+(4) **Default 1×**, so old patches and projects get no latency and stay bit-identical. (5) **Auto gain measures**
+(two 200 ms energy followers, gain = √(in/out)) instead of a fixed law. (6) **Crush is its own slot**, right after
+the drive: chain order drive → crush → chorus → flanger → phaser → delay → (reverb) → width → output.
+**Options considered.** Latency only while the drive is on; IIR allpass halfbands (~2 samples, non-linear phase);
+default 2×; a static auto-gain law per drive setting (built first, measured 6–13 dB off on real patches); crush
+inside the drive.
+**Why.** CLAP allows a latency change only inside `activate`, so anything that changes the latency must cost a
+restart: tying it to a setting you choose once (the oversampling) and not to one you automate (the switch)
+keeps restarts rare. Linear phase keeps the waveform and gives a whole, honest latency; 0.8 ms is nothing for a
+synth. Measured auto gain was within ±1.5 dB on the E-piano and Brass where the fixed law missed by up to 13 dB.
+**Revisit if:** FL Studio mishandles CLAP latency or restarts (then: report 0 and accept the timing offset, or
+use IIR halfbands for a near-zero latency); someone plays live through tiny buffers and feels 0.8 ms; the
+measured auto gain is heard "breathing" on long, evolving pads (then: a slower follower, or the fixed law back
+as an option).
+**The owner might choose differently if:** they prefer minimum-phase IIR oversampling and reporting no latency
+(many synths do: the phase shift is inaudible on a distorted sound); they'd rather the auto gain be a fixed,
+predictable curve (it never moves on its own); or they want the crusher inside the drive as one "Distortion" box.
+
 <!-- Append entries like:
 ### 2026-11-20: D5 decided: double phase in [0,1)
 Why: ...

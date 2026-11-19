@@ -1,10 +1,10 @@
 // fss/fx/fx_chain.h: the global FX chain after the voice sum (L5.1, D16).
 //
-//   voices (mono sum) ─► [ chorus ] ─► [ flanger ] ─► [ phaser ] ─► [ delay ] ─► [ width ] ─► output gain ─► clip
-//                        └── FxSlots, fixed order; later lessons insert theirs ──┘
+//   voices ─► [ drive ] ─► [ crush ] ─► [ chorus ] ─► [ flanger ] ─► [ phaser ] ─► [ delay ] ─► [ width ] ─► output gain ─► clip
+//             └── FxSlots, fixed order; later lessons insert theirs ──────────────────────────────┘
 //
 // The planned order, each lesson inserting its slot where it belongs:
-//   drive (L5.2) → chorus → flanger → phaser (L5.4) → delay (L5.3) → reverb (L5.5) → EQ (L5.6) → width → output
+//   drive → crush (L5.2) → chorus → flanger → phaser (L5.4) → delay (L5.3) → reverb (L5.5) → EQ (L5.6) → width → output
 // Why this order: distortion before anything that spreads the sound in time (distorting a reverb makes mud);
 // modulation before echoes, so every repeat carries the chorus; reverb after the delay, so the echoes sit in
 // the room; EQ on the finished sound; width last, so it widens what the stereo effects made; the output level
@@ -16,7 +16,9 @@
 #pragma once
 
 #include <fss/fx/chorus.h>
+#include <fss/fx/crush.h>
 #include <fss/fx/delay.h>
+#include <fss/fx/drive.h>
 #include <fss/fx/effect.h>
 #include <fss/fx/flanger.h>
 #include <fss/fx/fx_params.h>
@@ -49,6 +51,12 @@ public:
     /// New settings (targets: switches fade, smoothed values glide). Real-time safe.
     void setParams(const FxParams& p) noexcept
     {
+        auto& drive = std::get<FxSlot<Drive>>(slots_);
+        drive.setEnabled(p.drive.enabled);
+        drive.effect().setParams(p.drive);
+        auto& crush = std::get<FxSlot<Crush>>(slots_);
+        crush.setEnabled(p.crush.enabled);
+        crush.effect().setParams(p.crush);
         auto& chorus = std::get<FxSlot<Chorus>>(slots_);
         chorus.setEnabled(p.chorus.enabled);
         chorus.effect().setParams(p.chorus);
@@ -92,15 +100,32 @@ public:
     /// Is any effect with a tail still running? (Then the output may still change though the input is silent.)
     [[nodiscard]] bool ringing() const noexcept
     {
-        return std::apply([](const auto&... slot) { return (false || ... || (slot.awake() && slot.effect().tailSamples() > 0)); },
-                          slots_);
+        return std::apply([](const auto&... slot) { return (false || ... || slot.ringing()); }, slots_);
+    }
+
+    // ---- latency (L5.2) ----
+    /// The chain's delay in samples (serial delays add). Constant until commitLatency().
+    [[nodiscard]] int latencySamples() const noexcept
+    {
+        return std::apply([](const auto&... slot) { return (0 + ... + slot.latencySamples()); }, slots_);
+    }
+    /// Some effect asks for a different latency than the one in use (the oversampling factor changed).
+    [[nodiscard]] bool latencyPending() const noexcept
+    {
+        return std::apply([](const auto&... slot) { return (false || ... || slot.latencyPending()); }, slots_);
+    }
+    /// Switch every effect to the latency it asks for. Real-time safe, but a jump in time (see FxSlot).
+    void commitLatency() noexcept
+    {
+        std::apply([](auto&... slot) { (slot.commitLatency(), ...); }, slots_);
     }
 
     [[nodiscard]] const FxSlot<StereoWidth>& width() const noexcept { return std::get<FxSlot<StereoWidth>>(slots_); }
+    [[nodiscard]] const FxSlot<Drive>& drive() const noexcept { return std::get<FxSlot<Drive>>(slots_); }
     [[nodiscard]] const FxSlot<StereoDelay>& delay() const noexcept { return std::get<FxSlot<StereoDelay>>(slots_); }
 
 private:
-    std::tuple<FxSlot<Chorus>, FxSlot<Flanger>, FxSlot<Phaser>, FxSlot<StereoDelay>, FxSlot<StereoWidth>> slots_{};
+    std::tuple<FxSlot<Drive>, FxSlot<Crush>, FxSlot<Chorus>, FxSlot<Flanger>, FxSlot<Phaser>, FxSlot<StereoDelay>, FxSlot<StereoWidth>> slots_{};
     Gain output_{};
     int maxBlock_ = 512;
 };

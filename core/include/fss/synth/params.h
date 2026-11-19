@@ -83,7 +83,7 @@ namespace param_id {
 // Globals are numbered in groups of ten so related ids stay together: 1-9 global, 10-19 filter (L1.10),
 // 30-39 LFO 1 + vibrato, 40-49 LFO 2 (L1.11), 50-59 voice / playing (L2.5).
 // FX (L5.1) get a hundred of their own, ten per effect: 200-209 width, 210-219 delay (L5.3),
-// 220-229 chorus, 230-239 flanger, 240-249 phaser (L5.4). 70-79 mod envelope (L4.1). 60-69 unison (L4.4).
+// 220-229 chorus, 230-239 flanger, 240-249 phaser (L5.4), 250-259 drive, 260-269 crush (L5.2). 70-79 mod envelope (L4.1). 60-69 unison (L4.4).
 inline constexpr std::uint32_t kAlgorithm = 1, kOutputDb = 2, kTuningA4 = 3, kBendRange = 4;
 inline constexpr std::uint32_t kFilterMode = 10, kCutoff = 11, kResonance = 12, kFilterEnvAmount = 13,
                                kKeyTrack = 14, kFilterVel = 15, kFilterAttack = 16, kFilterDecay = 17,
@@ -103,6 +103,9 @@ inline constexpr std::uint32_t kFlangerOn = 230, kFlangerRate = 231, kFlangerDel
                                kFlangerFeedback = 234, kFlangerMix = 235;
 inline constexpr std::uint32_t kPhaserOn = 240, kPhaserRate = 241, kPhaserCenter = 242, kPhaserDepth = 243,
                                kPhaserFeedback = 244, kPhaserStages = 245, kPhaserMix = 246;
+inline constexpr std::uint32_t kDriveOn = 250, kDriveType = 251, kDrive = 252, kDriveTone = 253, kDriveOversampling = 254,
+                               kDriveAutoGain = 255, kDriveOutput = 256, kDriveMix = 257;
+inline constexpr std::uint32_t kCrushOn = 260, kCrushBits = 261, kCrushRate = 262, kCrushMix = 263;
 inline constexpr std::uint32_t kModEnvAttack = 70, kModEnvDecay = 71, kModEnvSustain = 72, kModEnvRelease = 73;
 enum class ModField : std::uint8_t { Source, Via, Dest, Amount }; // APPEND ONLY (part of the ids)
 constexpr std::uint32_t modSlot(int slot, ModField f) { return 300u + 10u * static_cast<std::uint32_t>(slot) + static_cast<std::uint32_t>(f); }
@@ -194,6 +197,21 @@ inline constexpr ParamInfo kGlobalParams[] = {
     {param_id::kModEnvRelease, "Mod env release", "ms", 1.0f, 30000.0f, 300.0f, Skew::Exp, 0.0f, 0, ParamTarget::ModEnv, -1, {}, "Mod env"},
     // ---- FX chain (L5.1). Smoothing happens inside the effects, so smoothingMs is 0 here. ----
     // Table order = chain order (the editor's FX page draws the groups left to right in this order).
+    // Drive and crush (L5.2): first, so the effects after them spread the distorted sound, not the other way round.
+    // Type: 0 Soft, 1 Hard, 2 Fold, 3 Tube (dsp::ShaperType). Oversample: 0 = 1x, 1 = 2x, 2 = 4x; it sets the
+    // plugin's latency (31 / 37 samples), so in a DAW the change takes effect when the host restarts the plugin.
+    {param_id::kDriveOn, "Drive on", "on/off", 0.0f, 1.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Fx, -1, {}, "Drive"},
+    {param_id::kDriveType, "Drive type", "", 0.0f, 3.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Fx, -1, {}, "Drive"},
+    {param_id::kDrive, "Drive", "dB", 0.0f, 48.0f, 12.0f, Skew::Linear, 0.0f, 0, ParamTarget::Fx, -1, {}, "Drive"},
+    {param_id::kDriveTone, "Drive tone", "dB", -12.0f, 12.0f, 0.0f, Skew::Linear, 0.0f, 0, ParamTarget::Fx, -1, {}, "Drive"},
+    {param_id::kDriveOversampling, "Drive oversample", "", 0.0f, 2.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Fx, -1, {}, "Drive"},
+    {param_id::kDriveAutoGain, "Drive auto gain", "on/off", 0.0f, 1.0f, 1.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Fx, -1, {}, "Drive"},
+    {param_id::kDriveOutput, "Drive output", "dB", -24.0f, 12.0f, 0.0f, Skew::Linear, 0.0f, 0, ParamTarget::Fx, -1, {}, "Drive"},
+    {param_id::kDriveMix, "Drive mix", "%", 0.0f, 100.0f, 100.0f, Skew::Linear, 0.0f, 0, ParamTarget::Fx, -1, {}, "Drive"},
+    {param_id::kCrushOn, "Crush on", "on/off", 0.0f, 1.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Fx, -1, {}, "Crush"},
+    {param_id::kCrushBits, "Crush bits", "bits", 1.0f, 16.0f, 8.0f, Skew::Linear, 0.0f, 0, ParamTarget::Fx, -1, {}, "Crush"},
+    {param_id::kCrushRate, "Crush rate", "Hz", 100.0f, 48000.0f, 12000.0f, Skew::Exp, 0.0f, 0, ParamTarget::Fx, -1, {}, "Crush"},
+    {param_id::kCrushMix, "Crush mix", "%", 0.0f, 100.0f, 100.0f, Skew::Linear, 0.0f, 0, ParamTarget::Fx, -1, {}, "Crush"},
     // Chorus, flanger, phaser (L5.4): the modulation effects, before the delay so every echo carries them.
     {param_id::kChorusOn, "Chorus on", "on/off", 0.0f, 1.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Fx, -1, {}, "Chorus"},
     {param_id::kChorusRate, "Chorus rate", "Hz", 0.05f, 5.0f, 0.6f, Skew::Exp, 0.0f, 0, ParamTarget::Fx, -1, {}, "Chorus"},

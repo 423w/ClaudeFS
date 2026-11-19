@@ -72,6 +72,18 @@ float getParam(const Patch& patch, const ParamInfo& p) noexcept
         case param_id::kModEnvSustain: return patch.mod.env.sustain;
         case param_id::kModEnvRelease: return patch.mod.env.releaseMs;
         case param_id::kWidthOn: return patch.fx.width.enabled ? 1.0f : 0.0f;
+        case param_id::kDriveOn: return patch.fx.drive.enabled ? 1.0f : 0.0f;
+        case param_id::kDriveType: return static_cast<float>(patch.fx.drive.type);
+        case param_id::kDrive: return patch.fx.drive.driveDb;
+        case param_id::kDriveTone: return patch.fx.drive.toneDb;
+        case param_id::kDriveOversampling: return static_cast<float>(patch.fx.drive.oversampling);
+        case param_id::kDriveAutoGain: return patch.fx.drive.autoGain ? 1.0f : 0.0f;
+        case param_id::kDriveOutput: return patch.fx.drive.outputDb;
+        case param_id::kDriveMix: return patch.fx.drive.mixPct;
+        case param_id::kCrushOn: return patch.fx.crush.enabled ? 1.0f : 0.0f;
+        case param_id::kCrushBits: return patch.fx.crush.bits;
+        case param_id::kCrushRate: return patch.fx.crush.rateHz;
+        case param_id::kCrushMix: return patch.fx.crush.mixPct;
         case param_id::kChorusOn: return patch.fx.chorus.enabled ? 1.0f : 0.0f;
         case param_id::kChorusRate: return patch.fx.chorus.rateHz;
         case param_id::kChorusDepth: return patch.fx.chorus.depthMs;
@@ -185,6 +197,18 @@ void setParam(Patch& patch, const ParamInfo& p, float plain) noexcept
         case param_id::kModEnvSustain: patch.mod.env.sustain = v; return;
         case param_id::kModEnvRelease: patch.mod.env.releaseMs = v; return;
         case param_id::kWidthOn: patch.fx.width.enabled = v >= 0.5f; return;
+        case param_id::kDriveOn: patch.fx.drive.enabled = v >= 0.5f; return;
+        case param_id::kDriveType: patch.fx.drive.type = static_cast<std::uint8_t>(v); return;
+        case param_id::kDrive: patch.fx.drive.driveDb = v; return;
+        case param_id::kDriveTone: patch.fx.drive.toneDb = v; return;
+        case param_id::kDriveOversampling: patch.fx.drive.oversampling = static_cast<std::uint8_t>(v); return;
+        case param_id::kDriveAutoGain: patch.fx.drive.autoGain = v >= 0.5f; return;
+        case param_id::kDriveOutput: patch.fx.drive.outputDb = v; return;
+        case param_id::kDriveMix: patch.fx.drive.mixPct = v; return;
+        case param_id::kCrushOn: patch.fx.crush.enabled = v >= 0.5f; return;
+        case param_id::kCrushBits: patch.fx.crush.bits = v; return;
+        case param_id::kCrushRate: patch.fx.crush.rateHz = v; return;
+        case param_id::kCrushMix: patch.fx.crush.mixPct = v; return;
         case param_id::kChorusOn: patch.fx.chorus.enabled = v >= 0.5f; return;
         case param_id::kChorusRate: patch.fx.chorus.rateHz = v; return;
         case param_id::kChorusDepth: patch.fx.chorus.depthMs = v; return;
@@ -266,6 +290,8 @@ std::string_view valueLabel(const ParamInfo& p, int value) noexcept
         return value >= 0 && value < fx::kNumDelayDivisions ? fx::kDelayDivisions[static_cast<std::size_t>(value)].name
                                                              : std::string_view{};
     case param_id::kDelayTimeMode: return pick({"Clean", "Tape"});
+    case param_id::kDriveType: return pick({"Soft", "Hard", "Fold", "Tube"});
+    case param_id::kDriveOversampling: return pick({"1x", "2x", "4x"});
     default: break;
     }
     if (p.unit == "on/off")

@@ -168,3 +168,30 @@ Each lesson adds a subsection. Reinstall the plugin after each build (`tools\ins
    if it crackles at your buffer size.
 6. Matrix pan: on the Mod page, slot 1 = **LFO 1 → Pan, 80 %** on any patch: each voice swings left and right
    (with LFO 1 free-running they move together; with Key sync on, each note on its own).
+
+### L5.2: drive with oversampling on and off, the crusher, the latency
+1. Load **Brass**. FX page, **Drive** panel: **On**, Type **Soft**, Drive **24 dB**, Oversample **1x**. Play a
+   few notes high up (C5 to C7).
+   - Expect: a saturated, buzzier brass at about the same loudness (Auto gain is on). Switch **Auto gain** off
+     for a moment to hear the "louder sounds better" trap: louder and more exciting, but that's only the level.
+2. Same, Type **Hard**, Drive 30 dB, and play the highest notes, holding one. Then set Oversample to **4x**.
+   - Expect at 1x: a faint, inharmonic whistle or "ring-mod" haze above high notes that doesn't follow the pitch
+     (aliasing). At 4x it should be much quieter (measured −32 dB → −56 dB). Report: can you hear 1x vs 4x?
+   - The change of Oversample makes CFS ask FL for a restart (CLAP `request_restart`): you may hear a short gap.
+     Report what happens: a gap, nothing, or the knob changes but the sound doesn't (then FL ignored the restart;
+     the new setting would apply only after FL restarts the plugin, e.g. on the next play or project reload).
+3. Latency: with Oversample at **4x**, put a CFS note on the beat next to a kick drum (or a metronome) and render.
+   - Expect: no audible offset (CFS reports 37 samples, 0.8 ms; FL should start it that much earlier). FL's
+     Mixer shows a plugin's delay in the slot's menu / "Plugin delay compensation" area: report whether CFS
+     shows 37 samples there. With `CFS_CLAP_TRACE=1`: after the restart, `%TEMP%\cfs_clap_trace.txt` has a line
+     `activate: latency 0 -> 37 samples`, and the audio summary ends with `restart requests 1`.
+4. Toggle **Drive on** while a chord holds, with Oversample 4x.
+   - Expect: a smooth 10 ms fade, **no restart** (switching never changes the latency) and no flam or comb.
+5. **Tone**: Drive Soft 24 dB, sweep **Tone** from −12 to +12 dB on a chord.
+   - Expect: −12 = fat, the highs stay clean; +12 = fizzy, the highs distort first. With Drive at 0 dB and Type
+     Hard on a quiet sound, Tone should change nothing at all (it's an exact pre/post pair).
+6. **Crush on the bell**: load **Bell**, switch **Crush on** (Bits 8, Rate 12000 Hz). Then Bits 6 → 4, Rate down
+   to 6000 and 3000 Hz.
+   - Expect: bits add a grainy noise that follows the bell's decay (silent when it's silent); rate makes new,
+     inharmonic metallic tones (aliasing on purpose). Report: musical, or just broken?
+7. CPU: Drive at 4x costs about 1 % of a core (all voices together); Crush almost nothing.

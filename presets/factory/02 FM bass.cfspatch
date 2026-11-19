@@ -55,6 +55,22 @@ name = FM bass
 72 = 0              # Mod env sustain
 73 = 300            # Mod env release [ms]
 
+# Drive
+250 = 0             # Drive on (Off)
+251 = 0             # Drive type (Soft)
+252 = 12            # Drive [dB]
+253 = 0             # Drive tone [dB]
+254 = 0             # Drive oversample (1x)
+255 = 1             # Drive auto gain (On)
+256 = 0             # Drive output [dB]
+257 = 100           # Drive mix [%]
+
+# Crush
+260 = 0             # Crush on (Off)
+261 = 8             # Crush bits [bits]
+262 = 12000         # Crush rate [Hz]
+263 = 100           # Crush mix [%]
+
 # Chorus
 220 = 0             # Chorus on (Off)
 221 = 0.6           # Chorus rate [Hz]

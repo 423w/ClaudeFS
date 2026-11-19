@@ -11,6 +11,29 @@
 
 namespace fss::fx {
 
+/// Drive (L5.2): pre-emphasis → gain → waveshaper (at 1×, 2× or 4×) → de-emphasis → loudness match → mix.
+/// `type` is a dsp::ShaperType (0 Soft, 1 Hard, 2 Fold, 3 Tube); `oversampling` 0 = 1×, 1 = 2×, 2 = 4×.
+/// The oversampling factor sets the plugin's latency, so a change takes effect at the host's next restart
+/// (fx/drive.h). Default 1×: no latency, so patches from before L5.2 stay bit-identical and undelayed.
+struct DriveParams {
+    bool enabled = false;
+    std::uint8_t type = 0;
+    float driveDb = 12.0f;      // input gain into the shaper
+    float toneDb = 0.0f;        // pre-emphasis of the highs into the shaper (exactly undone after it)
+    std::uint8_t oversampling = 0;
+    bool autoGain = true;       // match the loudness of a −12 dBFS sine at any drive
+    float outputDb = 0.0f;      // trim after the auto gain
+    float mixPct = 100.0f;      // linear mix with the (latency-aligned) dry signal
+};
+
+/// Crush (L5.2): sample-rate reduction (sample & hold) and amplitude quantization. Deliberate aliasing.
+struct CrushParams {
+    bool enabled = false;
+    float bits = 8.0f;          // 1..16, fractional allowed: step = 2^(1 − bits)
+    float rateHz = 12000.0f;    // hold rate; at or above the sample rate: no reduction
+    float mixPct = 100.0f;
+};
+
 /// Stereo width (L5.1): mid/side scaling. 100 % = unchanged, 0 % = mono, 200 % = the side doubled.
 struct WidthParams {
     bool enabled = false;
@@ -85,6 +108,8 @@ struct PhaserParams {
 
 /// Everything the FX chain needs. One member per effect, in chain order (fx_chain.h).
 struct FxParams {
+    DriveParams drive{};    // L5.2
+    CrushParams crush{};    // L5.2
     ChorusParams chorus{};
     FlangerParams flanger{};
     PhaserParams phaser{};

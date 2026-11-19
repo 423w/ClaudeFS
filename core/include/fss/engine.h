@@ -49,6 +49,17 @@ public:
 
     /// A/B demos only: false makes every live parameter change jump (zipper noise). Call before prepare().
     void setSmoothingEnabled(bool on) noexcept { smoothing_ = on; }
+    /// LATENCY (L5.2). The Drive's oversampling delays the output (fxLatencySamples()). A plugin host compensates
+    /// for that delay, but only re-reads it when it restarts the plugin, so a plugin must not change its latency
+    /// in the middle of processing. With defer on (the CLAP plugin), a new oversampling factor only takes effect at
+    /// the next prepare() or setPatch() (the plugin's activate); latencyPending() tells the plugin to ask the host
+    /// for that restart. With defer off (the default: the standalone app, offline renders and tests, where nothing
+    /// compensates anyway), the new factor applies at the parameter change itself.
+    void setDeferLatencyChanges(bool on) noexcept { deferLatency_ = on; }
+    /// The delay of the output, in samples, as configured now.
+    [[nodiscard]] int latencySamples() const noexcept { return fx_.latencySamples(); }
+    /// The patch asks for a different latency than the one in use (only ever true with defer on).
+    [[nodiscard]] bool latencyPending() const noexcept { return fx_.latencyPending(); }
     /// A/B demos only (L2.6): false leaves the thread's denormal mode alone inside process().
     void setFlushDenormals(bool on) noexcept { flushDenormals_ = on; }
     [[nodiscard]] const synth::Patch& patch() const noexcept { return patch_; }
@@ -114,6 +125,7 @@ private:
     synth::ModSums hostGlobal_{};    // L4.1: the host's all-notes modulation (PARAM_MOD with no note/key)
     bool smoothing_ = true;
     bool flushDenormals_ = true;
+    bool deferLatency_ = false;      // L5.2: see setDeferLatencyChanges
     int polyphony_ = kMaxPolyphony;
     double sampleRate_ = 48000.0;
     float bend_ = 0.0f;

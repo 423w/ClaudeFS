@@ -96,6 +96,9 @@ bool readAll(const clap_istream* s, std::vector<std::byte>& bytes, std::size_t l
 
 FssClap::FssClap(const clap_host* host) : host_(host)
 {
+    // L5.2: a host compensates for our latency only if it knows it, and it re-reads it only when it restarts us,
+    // so a new oversampling factor waits for that restart (requested in process(), applied in activate()).
+    engine_.setDeferLatencyChanges(true);
     for (std::size_t i = 0; i < kNumParams; ++i)
         mainValues_[i].store(synth::getParam(mirror_, synth::kParams[i]), std::memory_order_relaxed);
     lastChannel_.fill(0);
@@ -111,6 +114,7 @@ bool FssClap::init()
     hostLog_ = static_cast<const clap_host_log*>(host_->get_extension(host_, CLAP_EXT_LOG));
     hostState_ = static_cast<const clap_host_state*>(host_->get_extension(host_, CLAP_EXT_STATE));
     hostTail_ = static_cast<const clap_host_tail*>(host_->get_extension(host_, CLAP_EXT_TAIL));
+    hostLatency_ = static_cast<const clap_host_latency*>(host_->get_extension(host_, CLAP_EXT_LATENCY));
     if (Trace::enabled())
         Trace::log(this, "init: host \"%s\" %s (CLAP %u.%u.%u), CFS %s", host_->name ? host_->name : "?",
                    host_->version ? host_->version : "?", host_->clap_version.major, host_->clap_version.minor,
@@ -137,8 +141,17 @@ bool FssClap::activate(double sampleRate, std::uint32_t minFrames, std::uint32_t
         Trace::log(this, "activate: out of memory");
         return false;
     }
-    engine_.setPatch(mirror_);
+    engine_.setPatch(mirror_); // commits the patch's oversampling factor: the latency is fixed from here (L5.2)
     tail_.store(static_cast<std::uint32_t>(engine_.fxTailSamples()), std::memory_order_relaxed);
+    // clap.latency: activate is the one place the latency may change, and the place to say so.
+    const auto latency = static_cast<std::uint32_t>(engine_.latencySamples());
+    if (latency != latency_.load(std::memory_order_relaxed)) {
+        Trace::log(this, "activate: latency %u -> %u samples", latency_.load(std::memory_order_relaxed), latency);
+        latency_.store(latency, std::memory_order_relaxed);
+        if (hostLatency_ && hostLatency_->changed)
+            hostLatency_->changed(host_);
+    }
+    restartRequested_.store(false, std::memory_order_relaxed);
     snap_.fill({});
     // toAudio_ is NOT drained: UI changes made while inactive are already in mirror_ (and so in the Engine),
     // and the first process() still turns them into out_events, so the host learns about them.
@@ -207,6 +220,13 @@ clap_process_status FssClap::process(const clap_process* p) noexcept
 
     peak_.store(std::max(peak, peak_.load(std::memory_order_relaxed) * 0.9f), std::memory_order_relaxed);
     voices_.store(engine_.busyVoices(), std::memory_order_relaxed);
+    // clap.latency (L5.2): the patch asks for a new oversampling factor, which changes our latency. We may not
+    // change it while active, so ask the host to deactivate and re-activate us (thread-safe; once per change).
+    if (engine_.latencyPending() && !restartRequested_.exchange(true, std::memory_order_relaxed)) {
+        ++stats_.restartRequests;
+        if (host_->request_restart)
+            host_->request_restart(host_);
+    }
     // clap.tail: tell the host when the tail changes (an effect switched on, a longer delay time), from the
     // audio thread, as the extension asks.
     const auto tail = static_cast<std::uint32_t>(engine_.fxTailSamples());
@@ -824,6 +844,12 @@ const clap_plugin_tail kTailExt = {
     [](const clap_plugin* p) -> std::uint32_t { return FssClap::self(p)->tailSamples(); },
 };
 
+// clap.latency (L5.2): the Drive's oversampling filters delay the output by 31 (2x) or 37 (4x) samples. The host
+// starts CFS that much earlier (plugin delay compensation), so its notes still land on the beat.
+const clap_plugin_latency kLatencyExt = {
+    [](const clap_plugin* p) -> std::uint32_t { return FssClap::self(p)->latencySamples(); },
+};
+
 const clap_plugin_gui kGuiExt = {
     [](const clap_plugin*, const char* api, bool isFloating) -> bool {
         return !isFloating && api && std::strcmp(api, CLAP_WINDOW_API_WIN32) == 0;
@@ -877,6 +903,8 @@ const void* FssClap::getExtension(const char* id) const noexcept
         return &kGuiExt;
     if (std::strcmp(id, CLAP_EXT_TAIL) == 0)
         return &kTailExt;
+    if (std::strcmp(id, CLAP_EXT_LATENCY) == 0)
+        return &kLatencyExt;
     return nullptr;
 }
 

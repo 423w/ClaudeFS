@@ -86,6 +86,10 @@ public:
     /// The FX chain's tail in samples, as of the last block (an atomic: the host may ask from either thread).
     [[nodiscard]] std::uint32_t tailSamples() const noexcept { return tail_.load(std::memory_order_relaxed); }
 
+    // ---- clap.latency (L5.2) [main] ------------------------------------------------------------------------
+    /// The output's delay in samples, as of the last activate (only an activate may change it).
+    [[nodiscard]] std::uint32_t latencySamples() const noexcept { return latency_.load(std::memory_order_relaxed); }
+
     // ---- clap.gui (L3.5) [main] -------------------------------------------------------------------------
     bool guiCreate(const char* api, bool isFloating);
     void guiDestroy();
@@ -136,6 +140,7 @@ private:
     const clap_host_log* hostLog_ = nullptr;
     const clap_host_state* hostState_ = nullptr;
     const clap_host_tail* hostTail_ = nullptr; // L5.1: "my tail changed" (called from the audio thread)
+    const clap_host_latency* hostLatency_ = nullptr; // L5.2: "my latency changed" (only inside activate)
     std::unique_ptr<EditorWindow> editor_;
     synth::Patch mirror_{};
     std::string presetName_ = "Init";      // saved with the state; shown by the editor (L3.5)
@@ -174,6 +179,8 @@ private:
     std::atomic<float> peak_{0.0f};
     std::atomic<int> voices_{0};
     std::atomic<std::uint32_t> tail_{0}; // audio writes (end of each block), any thread reads
+    std::atomic<std::uint32_t> latency_{0};        // main writes (activate), main reads (latency.get)
+    std::atomic<bool> restartRequested_{false};    // audio sets (request_restart sent), main clears (activate)
 };
 
 } // namespace fss::plugin

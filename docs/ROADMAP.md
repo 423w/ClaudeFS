@@ -213,7 +213,7 @@ Modes (tell Claude which one you want):
 
 ### Branch 5: Effects
 - [x] L5.1 FX architecture (D16; FL check: docs/FL-STUDIO.md section 7)
-- [ ] L5.2 Distortion & oversampling
+- [x] L5.2 Distortion & oversampling (drive 1x/2x/4x + crush; clap.latency with restart; FL check: docs/FL-STUDIO.md section 7)
 - [x] L5.3 Delay (tempo sync from the CLAP transport; FL check: docs/FL-STUDIO.md section 7)
 - [x] L5.4 Chorus/flanger/phaser ("E-piano chorus" preset; FL check: docs/FL-STUDIO.md section 7)
 - [ ] L5.5 Reverb
