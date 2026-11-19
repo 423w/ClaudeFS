@@ -216,7 +216,7 @@ Modes (tell Claude which one you want):
 - [x] L5.2 Distortion & oversampling (drive 1x/2x/4x + crush; clap.latency with restart; FL check: docs/FL-STUDIO.md section 7)
 - [x] L5.3 Delay (tempo sync from the CLAP transport; FL check: docs/FL-STUDIO.md section 7)
 - [x] L5.4 Chorus/flanger/phaser ("E-piano chorus" preset; FL check: docs/FL-STUDIO.md section 7)
-- [ ] L5.5 Reverb
+- [x] L5.5 Reverb (D17: FDN; RT60 = the knob at 1 kHz within 1.2 %; "Bell hall"; FL check: docs/FL-STUDIO.md section 7)
 - [ ] L5.6 EQ & dynamics
 
 ### Branch 6: Craft

@@ -104,7 +104,7 @@ parser, written yourself or a single-header library). Either way: stable param I
 ### D16. FX architecture: `DECIDED` → fixed order, effects held by value in a `std::tuple`, a C++20 concept as the interface  *(L5.1, see Log)*
 Fixed chain order vs reorderable slots; virtual `Effect` interface vs `std::variant` + `std::visit`.
 
-### D17. Reverb algorithm: `OPEN`  *(L5.5)*
+### D17. Reverb algorithm: `DECIDED` → 8-line FDN, Householder feedback, 4-stage Hadamard diffuser, Jot damping  *(L5.5, see Log)*
 Freeverb (classic, simple) → Dattorro plate (beautiful, fixed topology) → FDN (scalable, modern).
 Recommendation: build Freeverb to learn, then pick FDN or Dattorro as the "real" one.
 
@@ -519,6 +519,31 @@ as an option).
 **The owner might choose differently if:** they prefer minimum-phase IIR oversampling and reporting no latency
 (many synths do: the phase shift is inaudible on a distorted sound); they'd rather the auto gain be a fixed,
 predictable curve (it never moves on its own); or they want the crusher inside the drive as one "Distortion" box.
+
+### 2026-11-19: D17 decided (CFS, L5.5): an 8-line FDN with a Hadamard diffuser
+**Decision.** The reverb (`fx/reverb.h`) is a feedback delay network: 8 cubic-read delay lines (40–100 ms × size),
+a Householder feedback matrix, per-line decay gains from the RT60 (g = 10^(−3d/(RT60·fs))), Jot absorption filters
+for the damping (one-pole per line, the RT60 at Nyquist = RT60 × (1 − 0.8 × damping)), slow per-line length
+modulation (±0.5 ms × Mod), in front a 4-stage diffuser (fixed delays, shuffle, signs, 8-point Hadamard), and two
+orthogonal ±1 output patterns for a decorrelated stereo tail. Schroeder (1962) and Freeverb were built first, as
+reference renders only.
+**Options considered.** Schroeder (exact decay, sparse: NED ≤ 0.3); Freeverb (NED 0.78, room size = a feedback,
+metallic on bells); Dattorro's plate (lush, fixed topology tuned at 29.8 kHz, decay = a gain); the FDN (chosen);
+16 lines instead of 8.
+**Why.** The exit criterion is a decay knob in seconds, and the FDN *states* it: every line loses exactly 60 dB per
+RT60 seconds whatever its length, so the measured RT60 is within 1.2 % of the knob at 1 kHz from 0.3 to 10 s. It
+also scales (size, line count) without retuning, damping per line keeps the high-frequency decay uniform, and with
+the diffuser it's noise-dense by 50 ms. Cost: 1.3 % of a core.
+**Consequences found while building.** The cubic read inside the loop loses a little treble per pass, so the top
+octave decays faster and the *broadband* RT60 is ~6 % short (journal). The diffuser needed its own interleaved
+rings to be cheap.
+**Revisit if:** the owner's ears prefer a plate's character on bells (then a Dattorro tank as a second algorithm,
+with a measured decay curve), a 10 s tail rings audibly (more lines, or more modulation), or CPU matters (fewer
+diffuser stages; SIMD over the 8 lines is natural: L6.2).
+**The owner might choose differently if:** they love the Lexicon/plate sound and accept a calibrated "decay"
+(Dattorro is about 100 lines and famous for a reason), they want the simplest thing that works (Freeverb is 80
+lines and public domain), or they prefer a reverb with a smaller, Valhalla-style "character" parameter set over
+physical units.
 
 <!-- Append entries like:
 ### 2026-11-20: D5 decided: double phase in [0,1)

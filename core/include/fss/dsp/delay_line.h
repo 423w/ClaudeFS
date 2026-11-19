@@ -17,9 +17,15 @@
 // bad when the delay moves; not implemented here. [DATTORRO] part 2 discusses it.)
 //
 // Allocation happens only in prepare(). Everything else is real-time safe.
+//
+// LAZY CLEARING (L5.5, an L5.3 open item). reset() used to fill the whole buffer with zeros: 4 s of delay at
+// 192 kHz is 1 MB, 210 µs on the audio thread every time an FX slot put its delay to sleep. Now reset() only
+// remembers that nothing has been written yet (written_ = 0), and a read that reaches back further than what was
+// written since then reads zeros instead. The result is bit-identical to clearing the buffer, at O(1) cost.
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <bit>
 #include <cmath>
 #include <cstddef>
@@ -85,11 +91,13 @@ public:
         mask_ = size - 1;
         maxDelay_ = static_cast<double>(maxDelaySamples);
         newest_ = 0;
+        written_ = 0;
     }
+    /// Silence, in O(1): the old contents stay in memory but can never be read again (see LAZY CLEARING).
     void reset() noexcept
     {
-        std::fill(buf_.begin(), buf_.end(), 0.0f);
         newest_ = 0;
+        written_ = 0;
     }
 
     /// Write the next input sample (it becomes "0 samples ago").
@@ -97,6 +105,8 @@ public:
     {
         newest_ = (newest_ + 1) & mask_;
         buf_[newest_] = x;
+        if (written_ <= mask_)
+            ++written_; // saturates at the buffer size: from then on every slot holds a real sample
     }
 
     /// Read `delaySamples` before the newest sample, clamped to [minimum, maxDelay]. A read-before-push loop
@@ -108,7 +118,20 @@ public:
         static_assert(I::kExtraSamples <= Interp::kExtraSamples, "the buffer has no room for this interpolation");
         constexpr double minDelay = std::is_same_v<I, CubicInterp> ? 1.0 : 0.0;
         const double d = std::fmin(std::fmax(delaySamples, minDelay), maxDelay_);
-        return I::read(buf_, mask_, newest_, d);
+        // Fast path: every sample the interpolation touches (up to whole + 2 ago) was written since the reset.
+        const auto whole = static_cast<std::size_t>(d);
+        if (whole + 3 <= written_)
+            return I::read(buf_, mask_, newest_, d);
+        // Shortly after a reset: copy the (up to) four samples around the read into a tiny buffer, with zeros
+        // for the ones written before the reset, and read that with the same policy. Index 7 plays "newest";
+        // the policy then finds sample (whole + k) ago at 7 − 2 − k, for k = −1..2 (delay shifted to 2 + fraction).
+        std::array<float, 8> local{};
+        for (int k = -1; k <= 2; ++k) {
+            const auto ago = static_cast<std::ptrdiff_t>(whole) + k;
+            if (ago >= 0 && static_cast<std::size_t>(ago) < written_)
+                local[static_cast<std::size_t>(5 - k)] = buf_[(newest_ - static_cast<std::size_t>(ago)) & mask_];
+        }
+        return I::read(local, 7, 7, 2.0 + (d - static_cast<double>(whole)));
     }
 
     [[nodiscard]] double maxDelay() const noexcept { return maxDelay_; }
@@ -118,6 +141,7 @@ private:
     std::vector<float> buf_ = std::vector<float>(1, 0.0f); // usable (silent) before prepare()
     std::size_t mask_ = 0;
     std::size_t newest_ = 0;
+    std::size_t written_ = 0; // samples pushed since the last reset, saturating at the buffer size
     double maxDelay_ = 0.0;
 };
 

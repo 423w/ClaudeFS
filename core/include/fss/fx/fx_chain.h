@@ -1,6 +1,6 @@
 // fss/fx/fx_chain.h: the global FX chain after the voice sum (L5.1, D16).
 //
-//   voices ─► [ drive ] ─► [ crush ] ─► [ chorus ] ─► [ flanger ] ─► [ phaser ] ─► [ delay ] ─► [ width ] ─► output gain ─► clip
+//   voices ─► [ drive ] ─► [ crush ] ─► [ chorus ] ─► [ flanger ] ─► [ phaser ] ─► [ delay ] ─► [ reverb ] ─► [ width ] ─► output ─► clip
 //             └── FxSlots, fixed order; later lessons insert theirs ──────────────────────────────┘
 //
 // The planned order, each lesson inserting its slot where it belongs:
@@ -24,6 +24,7 @@
 #include <fss/fx/fx_params.h>
 #include <fss/fx/gain.h>
 #include <fss/fx/phaser.h>
+#include <fss/fx/reverb.h>
 #include <fss/fx/width.h>
 
 #include <algorithm>
@@ -69,6 +70,9 @@ public:
         auto& delay = std::get<FxSlot<StereoDelay>>(slots_);
         delay.setEnabled(p.delay.enabled);
         delay.effect().setParams(p.delay);
+        auto& reverb = std::get<FxSlot<Reverb>>(slots_);
+        reverb.setEnabled(p.reverb.enabled);
+        reverb.effect().setParams(p.reverb);
         auto& width = std::get<FxSlot<StereoWidth>>(slots_);
         width.setEnabled(p.width.enabled);
         width.effect().setParams(p.width);
@@ -125,7 +129,7 @@ public:
     [[nodiscard]] const FxSlot<StereoDelay>& delay() const noexcept { return std::get<FxSlot<StereoDelay>>(slots_); }
 
 private:
-    std::tuple<FxSlot<Drive>, FxSlot<Crush>, FxSlot<Chorus>, FxSlot<Flanger>, FxSlot<Phaser>, FxSlot<StereoDelay>, FxSlot<StereoWidth>> slots_{};
+    std::tuple<FxSlot<Drive>, FxSlot<Crush>, FxSlot<Chorus>, FxSlot<Flanger>, FxSlot<Phaser>, FxSlot<StereoDelay>, FxSlot<Reverb>, FxSlot<StereoWidth>> slots_{};
     Gain output_{};
     int maxBlock_ = 512;
 };

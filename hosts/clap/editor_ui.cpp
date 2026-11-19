@@ -532,21 +532,29 @@ std::vector<std::string_view> fxGroups()
     return out;
 }
 
-/// Page 1: one panel per effect, side by side in chain order, with a signal-flow caption.
+/// Page 1: one panel per effect in chain order (left to right, then the next row), with a signal-flow caption.
+/// L5.5: with eight effects one row made every panel one knob wide (and scrolling), so the panels now wrap:
+/// as few rows as keep every panel at least two knobs wide, the panels shared out evenly between the rows.
 void fxPage(EditorModel& m, EditorState& st)
 {
     const std::vector<std::string_view> groups = fxGroups();
-    ImGui::TextDisabled("voices  >  %s  >  output", groups.empty() ? "" : "the effects below, left to right");
+    ImGui::TextDisabled("voices  >  %s  >  output", groups.empty() ? "" : "the effects below, in reading order");
     const ImGuiStyle& style = ImGui::GetStyle();
     const ImVec2 avail = ImGui::GetContentRegionAvail();
+    const std::size_t n = std::max<std::size_t>(groups.size(), 1);
+    const float minPanel = 2.2f * minCellWidth() + 2.0f * style.WindowPadding.x + style.ScrollbarSize;
+    const auto fit = static_cast<std::size_t>(std::max(1.0f, (avail.x + style.ItemSpacing.x) / (minPanel + style.ItemSpacing.x)));
+    const std::size_t rows = (n + fit - 1) / fit;
+    const std::size_t perRow = (n + rows - 1) / rows;
     // At least four panel widths, so one effect doesn't stretch across the whole window.
-    const float n = static_cast<float>(std::max<std::size_t>(groups.size(), 4));
-    const float w = (avail.x - style.ItemSpacing.x * (n - 1.0f)) / n;
+    const float cols = static_cast<float>(std::max<std::size_t>(perRow, 4));
+    const float w = (avail.x - style.ItemSpacing.x * (cols - 1.0f)) / cols;
+    const float h = rows == 1 ? avail.y * 0.6f : (avail.y - style.ItemSpacing.y * static_cast<float>(rows - 1)) / static_cast<float>(rows);
     for (std::size_t k = 0; k < groups.size(); ++k) {
-        if (k > 0)
+        if (k % perRow != 0)
             ImGui::SameLine();
         const std::string name(groups[k]);
-        ImGui::BeginChild(name.c_str(), ImVec2(w, avail.y * 0.6f), ImGuiChildFlags_Borders);
+        ImGui::BeginChild(name.c_str(), ImVec2(w, h), ImGuiChildFlags_Borders);
         ImGui::SeparatorText(name.c_str());
         controlTable(m, st, name.c_str(), group(name));
         ImGui::EndChild();

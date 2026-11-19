@@ -234,6 +234,16 @@ inline Patch widePad()
     return p;
 }
 
+/// Bell hall (L5.5): the Bell in the FDN reverb: a 3 s hall with a 20 ms gap before it, the highs dying a
+/// little faster than the lows, and the bass kept out of the wash. The patch the L5.5 FL Studio check uses.
+inline Patch bellHall()
+{
+    Patch p = bell();
+    p.fx.reverb = {.enabled = true, .decayS = 3.0f, .sizePct = 120.0f, .predelayMs = 20.0f, .dampingPct = 45.0f,
+                   .modPct = 30.0f, .lowCutHz = 150.0f, .mixPct = 32.0f};
+    return p;
+}
+
 /// The factory list hosts show (fss_play, the plugin editor). Since L3.4 the factory bank also exists as
 /// text files in presets/factory/ (written from these functions by `fss_render l3.4`; a test checks that
 /// the files and these functions agree), so the files are what users read, copy and edit.
@@ -255,6 +265,7 @@ inline constexpr NamedPreset kFactoryPresets[] = {
     {"E-piano chorus", epianoChorus}, // L5.4. Append only: the list position is the file number ("11 ...")
     {"Evolving matrix", evolvingMatrix}, // L4.1
     {"Wide pad", widePad},               // L4.4
+    {"Bell hall", bellHall},             // L5.5
     {"Init", [] { return Patch{}; }},
 };
 

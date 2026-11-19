@@ -27,5 +27,6 @@ void renderL5_1(const std::filesystem::path& outDir); // l5_1.cpp: FX slot switc
 void renderL5_2(const std::filesystem::path& outDir); // l5_2.cpp: drive, oversampling, aliasing, latency, bitcrush
 void renderL5_3(const std::filesystem::path& outDir); // l5_3.cpp: delay line, synced delay, time changes, spill
 void renderL5_4(const std::filesystem::path& outDir); // l5_4.cpp: chorus e-piano, flanger vs phaser, interpolation
+void renderL5_5(const std::filesystem::path& outDir); // l5_5.cpp: Schroeder, Freeverb, the FDN reverb, RT60
 
 } // namespace fss::render

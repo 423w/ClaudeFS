@@ -39,6 +39,7 @@ add_executable(fss_render
     l5_2.cpp
     l5_3.cpp
     l5_4.cpp
+    l5_5.cpp
     engine_render.cpp)
 target_link_libraries(fss_render PRIVATE fss::core fss::wav fss::score fss::warnings)
 # Score files live in the source tree; bake their absolute path in so fss_render works from any folder.

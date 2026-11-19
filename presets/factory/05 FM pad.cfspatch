@@ -107,6 +107,16 @@ name = FM pad
 218 = 0             # Delay glide (Clean)
 217 = 25            # Delay mix [%]
 
+# Reverb
+270 = 0             # Reverb on (Off)
+271 = 2             # Reverb decay [s]
+272 = 100           # Reverb size [%]
+273 = 10            # Reverb predelay [ms]
+274 = 40            # Reverb damping [%]
+275 = 30            # Reverb mod [%]
+276 = 100           # Reverb low cut [Hz]
+277 = 25            # Reverb mix [%]
+
 # Width
 200 = 0             # Width on (Off)
 201 = 100           # Width [%]

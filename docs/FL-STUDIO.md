@@ -195,3 +195,20 @@ Each lesson adds a subsection. Reinstall the plugin after each build (`tools\ins
    - Expect: bits add a grainy noise that follows the bell's decay (silent when it's silent); rate makes new,
      inharmonic metallic tones (aliasing on purpose). Report: musical, or just broken?
 7. CPU: Drive at 4x costs about 1 % of a core (all voices together); Crush almost nothing.
+
+### L5.5: the reverb on the bell
+1. Load **Bell** and play a few notes (C5–C6), then load **Bell hall** (factory preset 14) and play the same.
+   - Expect: the same bell in a hall: a short gap (20 ms), then a smooth, wide wash that lasts about 3 s,
+     its highs fading before its lows, with no flutter or metallic rattle.
+   - Report: would you use it on your FM bells instead of FL's own reverb (Fruity Reeverb 2)? Too bright, too dark,
+     too long? (Try **Damping** 20–70 %, **Size** 80–160 %, **Decay** 1.5–6 s, **Mix** 20–40 %.)
+2. **Decay = seconds**: set Decay to **2 s**, Mix 100 %, play one short staccato note and count: the tail should
+   be inaudible after roughly 2–3 s (RT60 is the time to fall 60 dB; it's measured at 2.00 s at 1 kHz).
+3. Switch **Reverb on** off while the tail rings.
+   - Expect: the tail **rings out** (spill, like the delay); new notes are dry.
+4. Turn **Size** while a long tail rings: the tail bends in pitch briefly (the line lengths glide), no clicks.
+5. **Mono**: put CFS's mixer track in mono with Bell hall.
+   - Expect: the reverb gets narrower and a little quieter, no hollow or phasey sound (the tail's L/R
+     correlation measures 0.03: almost independent channels).
+6. Render with a long Decay (10 s): the export should contain the whole tail (clap.tail grows with the decay).
+7. CPU: the reverb costs about 1.3 % of a core, once for the whole instrument (it's after the voices).

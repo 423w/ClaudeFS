@@ -42,7 +42,8 @@ add_executable(fss_tests
     test_modfx.cpp
     test_modmatrix.cpp
     test_unison.cpp
-    test_drive.cpp)
+    test_drive.cpp
+    test_reverb.cpp)
 # Catch2WithMain supplies main(), so test files contain only TEST_CASEs.
 # fss::warnings is linked here, but not to Catch2 itself (see the top-level CMakeLists.txt).
 target_link_libraries(fss_tests PRIVATE fss::core fss::wav fss::score fss::midi_message fss::preset_library fss_rt_trap fss::warnings

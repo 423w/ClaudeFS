@@ -106,6 +106,18 @@ struct PhaserParams {
     float mixPct = 50.0f;
 };
 
+/// Reverb (L5.5, D17): an 8-line feedback delay network after a 4-stage diffuser (fx/reverb.h).
+struct ReverbParams {
+    bool enabled = false;
+    float decayS = 2.0f;        // RT60 below the damping (measured: tests/test_reverb.cpp)
+    float sizePct = 100.0f;     // scales the 8 line lengths (40–100 ms at 100 %): echo spacing, "room size"
+    float predelayMs = 10.0f;   // the gap before the reverb starts
+    float dampingPct = 40.0f;   // 0 = highs decay as long as lows; 100 % = 5× faster (RT60 × 0.2 at Nyquist)
+    float modPct = 30.0f;       // line-length wobble (up to ±0.5 ms): breaks up ringing modes
+    float lowCutHz = 100.0f;    // high-pass on the reverb's input: keeps the bass out of the wash
+    float mixPct = 25.0f;       // equal power (uncorrelated with the dry sound)
+};
+
 /// Everything the FX chain needs. One member per effect, in chain order (fx_chain.h).
 struct FxParams {
     DriveParams drive{};    // L5.2
@@ -114,6 +126,7 @@ struct FxParams {
     FlangerParams flanger{};
     PhaserParams phaser{};
     DelayParams delay{};
+    ReverbParams reverb{};  // L5.5
     WidthParams width{};
 };
 

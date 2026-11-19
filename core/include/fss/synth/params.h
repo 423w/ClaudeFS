@@ -83,7 +83,7 @@ namespace param_id {
 // Globals are numbered in groups of ten so related ids stay together: 1-9 global, 10-19 filter (L1.10),
 // 30-39 LFO 1 + vibrato, 40-49 LFO 2 (L1.11), 50-59 voice / playing (L2.5).
 // FX (L5.1) get a hundred of their own, ten per effect: 200-209 width, 210-219 delay (L5.3),
-// 220-229 chorus, 230-239 flanger, 240-249 phaser (L5.4), 250-259 drive, 260-269 crush (L5.2). 70-79 mod envelope (L4.1). 60-69 unison (L4.4).
+// 220-229 chorus, 230-239 flanger, 240-249 phaser (L5.4), 250-259 drive, 260-269 crush (L5.2), 270-279 reverb (L5.5). 70-79 mod envelope (L4.1). 60-69 unison (L4.4).
 inline constexpr std::uint32_t kAlgorithm = 1, kOutputDb = 2, kTuningA4 = 3, kBendRange = 4;
 inline constexpr std::uint32_t kFilterMode = 10, kCutoff = 11, kResonance = 12, kFilterEnvAmount = 13,
                                kKeyTrack = 14, kFilterVel = 15, kFilterAttack = 16, kFilterDecay = 17,
@@ -106,6 +106,8 @@ inline constexpr std::uint32_t kPhaserOn = 240, kPhaserRate = 241, kPhaserCenter
 inline constexpr std::uint32_t kDriveOn = 250, kDriveType = 251, kDrive = 252, kDriveTone = 253, kDriveOversampling = 254,
                                kDriveAutoGain = 255, kDriveOutput = 256, kDriveMix = 257;
 inline constexpr std::uint32_t kCrushOn = 260, kCrushBits = 261, kCrushRate = 262, kCrushMix = 263;
+inline constexpr std::uint32_t kReverbOn = 270, kReverbDecay = 271, kReverbSize = 272, kReverbPredelay = 273,
+                               kReverbDamping = 274, kReverbMod = 275, kReverbLowCut = 276, kReverbMix = 277;
 inline constexpr std::uint32_t kModEnvAttack = 70, kModEnvDecay = 71, kModEnvSustain = 72, kModEnvRelease = 73;
 enum class ModField : std::uint8_t { Source, Via, Dest, Amount }; // APPEND ONLY (part of the ids)
 constexpr std::uint32_t modSlot(int slot, ModField f) { return 300u + 10u * static_cast<std::uint32_t>(slot) + static_cast<std::uint32_t>(f); }
@@ -242,6 +244,15 @@ inline constexpr ParamInfo kGlobalParams[] = {
     {param_id::kDelayPingPong, "Delay ping-pong", "on/off", 0.0f, 1.0f, 1.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Fx, -1, {}, "Delay"},
     {param_id::kDelayTimeMode, "Delay glide", "", 0.0f, 1.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Fx, -1, {}, "Delay"},
     {param_id::kDelayMix, "Delay mix", "%", 0.0f, 100.0f, 25.0f, Skew::Linear, 0.0f, 0, ParamTarget::Fx, -1, {}, "Delay"},
+    // Reverb (L5.5): after the delay, so the echoes sit in the room. Decay is the measured RT60.
+    {param_id::kReverbOn, "Reverb on", "on/off", 0.0f, 1.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Fx, -1, {}, "Reverb"},
+    {param_id::kReverbDecay, "Reverb decay", "s", 0.1f, 20.0f, 2.0f, Skew::Exp, 0.0f, 0, ParamTarget::Fx, -1, {}, "Reverb"},
+    {param_id::kReverbSize, "Reverb size", "%", 25.0f, 200.0f, 100.0f, Skew::Exp, 0.0f, 0, ParamTarget::Fx, -1, {}, "Reverb"},
+    {param_id::kReverbPredelay, "Reverb predelay", "ms", 0.0f, 250.0f, 10.0f, Skew::Power2, 0.0f, 0, ParamTarget::Fx, -1, {}, "Reverb"},
+    {param_id::kReverbDamping, "Reverb damping", "%", 0.0f, 100.0f, 40.0f, Skew::Linear, 0.0f, 0, ParamTarget::Fx, -1, {}, "Reverb"},
+    {param_id::kReverbMod, "Reverb mod", "%", 0.0f, 100.0f, 30.0f, Skew::Linear, 0.0f, 0, ParamTarget::Fx, -1, {}, "Reverb"},
+    {param_id::kReverbLowCut, "Reverb low cut", "Hz", 20.0f, 1000.0f, 100.0f, Skew::Exp, 0.0f, 0, ParamTarget::Fx, -1, {}, "Reverb"},
+    {param_id::kReverbMix, "Reverb mix", "%", 0.0f, 100.0f, 25.0f, Skew::Linear, 0.0f, 0, ParamTarget::Fx, -1, {}, "Reverb"},
     // Width (L5.1): last, so it widens what the stereo effects before it made.
     {param_id::kWidthOn, "Width on", "on/off", 0.0f, 1.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Fx, -1, {}, "Width"},
     {param_id::kWidth, "Width", "%", 0.0f, 200.0f, 100.0f, Skew::Linear, 0.0f, 0, ParamTarget::Fx, -1, {}, "Width"},
