@@ -280,6 +280,11 @@ void Engine::paramChange(const Event& e) noexcept
         allNotesOff();
         monoVoice_ = nullptr;
         break;
+    case synth::ParamTarget::Unison:
+        for (synth::Voice& v : voices_)
+            if (v.busy())
+                v.refreshUnison(); // copies fade in/out, detune and pan glide (L4.4)
+        break;
     case synth::ParamTarget::Play:
         break; // glide time/mode and note priority are read at the next note event
     case synth::ParamTarget::LfoRate:
@@ -495,12 +500,17 @@ void Engine::render(float* outL, float* outR, int from, int to) noexcept
                                       .sources = &globalSrc_,
                                       .global = &globalSums_,
                                       .routing = &routing_};
-        float sum = 0.0f;
+        // Stereo voices since L4.4 (unison spread, matrix pan); a mono voice adds the same value to both sums,
+        // so a patch without unison makes exactly the old (identical) L and R.
+        float sumL = 0.0f, sumR = 0.0f;
         for (synth::Voice& v : voices_)
-            if (v.busy())
-                sum += v.tick(ctl);
-        outL[i] = sum;
-        outR[i] = sum; // mono voices for now; stereo spread comes with unison (L4.4)
+            if (v.busy()) {
+                const synth::StereoSample s = v.tick(ctl);
+                sumL += s.l;
+                sumR += s.r;
+            }
+        outL[i] = sumL;
+        outR[i] = sumR;
     }
     // The FX chain (L5.1) runs on the same stretch, right after the voices: still sample-accurate, because
     // the next event's changes only reach the chain after this stretch is done. Its last stage is the output

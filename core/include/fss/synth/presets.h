@@ -225,6 +225,15 @@ inline Patch evolvingMatrix()
     return p;
 }
 
+/// Wide pad (L4.4): the FM pad with 4 unison copies, 18 cents of spread across the full stereo width. The
+/// mono-compatibility check in the L4.4 journal is done on this patch.
+inline Patch widePad()
+{
+    Patch p = evolvingPad();
+    p.unison = {.voices = 4, .detuneCents = 18.0f, .widthPct = 100.0f};
+    return p;
+}
+
 /// The factory list hosts show (fss_play, the plugin editor). Since L3.4 the factory bank also exists as
 /// text files in presets/factory/ (written from these functions by `fss_render l3.4`; a test checks that
 /// the files and these functions agree), so the files are what users read, copy and edit.
@@ -245,6 +254,7 @@ inline constexpr NamedPreset kFactoryPresets[] = {
     {"Marimba", marimba},
     {"E-piano chorus", epianoChorus}, // L5.4. Append only: the list position is the file number ("11 ...")
     {"Evolving matrix", evolvingMatrix}, // L4.1
+    {"Wide pad", widePad},               // L4.4
     {"Init", [] { return Patch{}; }},
 };
 

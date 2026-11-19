@@ -56,6 +56,7 @@ enum class ParamTarget : std::uint8_t {
     Fx,           // an FX-chain setting (L5.1): the chain gets new targets (switches fade, values glide)
     ModMatrix,    // a matrix slot (L4.1): the Engine recompiles its routing (the LFO routes do too)
     ModEnv,       // the mod envelope's times/sustain (L4.1): envelopes updated (like FilterEnv)
+    Unison,       // unison count / detune / width (L4.4): every sounding voice glides to the new layout
 };
 
 enum class OpField : std::uint8_t { // APPEND ONLY: values are part of the stable parameter ids
@@ -82,7 +83,7 @@ namespace param_id {
 // Globals are numbered in groups of ten so related ids stay together: 1-9 global, 10-19 filter (L1.10),
 // 30-39 LFO 1 + vibrato, 40-49 LFO 2 (L1.11), 50-59 voice / playing (L2.5).
 // FX (L5.1) get a hundred of their own, ten per effect: 200-209 width, 210-219 delay (L5.3),
-// 220-229 chorus, 230-239 flanger, 240-249 phaser (L5.4). 70-79 mod envelope (L4.1).
+// 220-229 chorus, 230-239 flanger, 240-249 phaser (L5.4). 70-79 mod envelope (L4.1). 60-69 unison (L4.4).
 inline constexpr std::uint32_t kAlgorithm = 1, kOutputDb = 2, kTuningA4 = 3, kBendRange = 4;
 inline constexpr std::uint32_t kFilterMode = 10, kCutoff = 11, kResonance = 12, kFilterEnvAmount = 13,
                                kKeyTrack = 14, kFilterVel = 15, kFilterAttack = 16, kFilterDecay = 17,
@@ -91,6 +92,7 @@ inline constexpr std::uint32_t kLfo1Rate = 30, kLfo1Shape = 31, kLfo1Delay = 32,
                                kVibrato = 35, kWheelVibrato = 36;
 inline constexpr std::uint32_t kLfo2Rate = 40, kLfo2Shape = 41, kLfo2Retrigger = 42, kLfo2Cutoff = 43, kLfo2Index = 44;
 inline constexpr std::uint32_t kVoiceMode = 50, kGlide = 51, kGlideLegato = 52, kPriority = 53;
+inline constexpr std::uint32_t kUnisonVoices = 60, kUnisonDetune = 61, kUnisonWidth = 62; // L4.4
 inline constexpr std::uint32_t kWidthOn = 200, kWidth = 201;
 inline constexpr std::uint32_t kDelayOn = 210, kDelayTime = 211, kDelaySync = 212, kDelayDivision = 213,
                                kDelayFeedback = 214, kDelayPingPong = 215, kDelayDamping = 216, kDelayMix = 217,
@@ -181,6 +183,10 @@ inline constexpr ParamInfo kGlobalParams[] = {
     {param_id::kGlide, "Glide", "ms", 0.0f, 2000.0f, 0.0f, Skew::Power2, 0.0f, 5, ParamTarget::Play, -1, {}, "Voice"},
     {param_id::kGlideLegato, "Glide legato", "on/off", 0.0f, 1.0f, 1.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Play, -1, {}, "Voice"},
     {param_id::kPriority, "Priority", "", 0.0f, 2.0f, 0.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Play, -1, {}, "Voice"},
+    // ---- unison (L4.4) ----
+    {param_id::kUnisonVoices, "Unison", "", 1.0f, 8.0f, 1.0f, Skew::Stepped, 0.0f, 0, ParamTarget::Unison, -1, {}, "Unison"},
+    {param_id::kUnisonDetune, "Unison detune", "cents", 0.0f, 100.0f, 20.0f, Skew::Linear, 0.0f, 0, ParamTarget::Unison, -1, {}, "Unison"},
+    {param_id::kUnisonWidth, "Unison width", "%", 0.0f, 100.0f, 80.0f, Skew::Linear, 0.0f, 0, ParamTarget::Unison, -1, {}, "Unison"},
     // ---- mod envelope (L4.1): a fourth ADSR that only modulates (a matrix source) ----
     {param_id::kModEnvAttack, "Mod env attack", "ms", 1.0f, 10000.0f, 1.0f, Skew::Exp, 0.0f, 0, ParamTarget::ModEnv, -1, {}, "Mod env"},
     {param_id::kModEnvDecay, "Mod env decay", "ms", 1.0f, 30000.0f, 500.0f, Skew::Exp, 0.0f, 0, ParamTarget::ModEnv, -1, {}, "Mod env"},

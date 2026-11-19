@@ -57,7 +57,7 @@ Record a knob gesture:
 3. Draw an automation clip by hand from 0 % to 100 %.
    - Expect: the knob sweeps 20 Hz → 20 kHz with the clip's *middle* at about **630 Hz** (CFS exposes continuous
      parameters as knob positions, so the sweep is even in pitch, not in Hz: see DECISIONS.md, L3.2 entry).
-4. FL's own parameter list: in the wrapper menu, **Browse parameters**. Expect 148 parameters as of L4.1 (64 global + 32 mod matrix + 13 per operator; Phase F adds more, see section 7), grouped with
+4. FL's own parameter list: in the wrapper menu, **Browse parameters**. Expect 151 parameters as of L4.4 (67 global + 32 mod matrix + 13 per operator; Phase F adds more, see section 7), grouped with
    names like "Cutoff", "Op A Ratio"; menus (filter mode, LFO shape) show names, not numbers.
 
 ## 5. Save with the project
@@ -153,3 +153,18 @@ Each lesson adds a subsection. Reinstall the plugin after each build (`tools\ins
    (piano roll note properties / "note modulation"), modulate CFS's **Cutoff** on one note of a chord.
    - Expect: only that note's filter moves. With `CFS_CLAP_TRACE=1`, the summary line's `param mod` count tells
      whether FL sent any PARAM_MOD at all; please report it.
+
+### L4.4: unison width
+1. Load **Wide pad** (factory preset 13) and hold a chord, on headphones.
+   - Expect: much wider and thicker than **FM pad** (the same patch at Unison 1), with a slow shimmer from
+     the detuned copies.
+2. On the Synth page, **Unison** section: while the chord holds, step **Unison** 1 → 4 → 8 → 2 → 1.
+   - Expect: it thickens and thins with **no click**; at 1 it's exactly the old mono FM pad.
+3. Turn **Unison width** from 100 % to 0 %: the sound narrows to the centre but stays thick (the copies are
+   still detuned). Turn **Unison detune** up to 60 cents and beyond: from shimmer to an obvious out-of-tune stack.
+4. Mono check: put FL's master (or CFS's mixer track) in **mono** with Wide pad at width 100 %.
+   - Expect: a little quieter (I measured −1.5 dB) and narrower, but no hollow or phasey sound.
+5. CPU: watch FL's CPU meter with Unison 8 and a big chord (16 notes): about 5× the cost of Unison 1. Report
+   if it crackles at your buffer size.
+6. Matrix pan: on the Mod page, slot 1 = **LFO 1 → Pan, 80 %** on any patch: each voice swings left and right
+   (with LFO 1 free-running they move together; with Key sync on, each note on its own).

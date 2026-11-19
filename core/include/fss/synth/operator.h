@@ -77,6 +77,8 @@ public:
     /// A per-sample level multiplier from the mod matrix (L4.1, "Op X level"); 1 = unmodulated. Applied after
     /// the smoothed level, so (level · 1) · env · sine is bit-identical to the unmodulated product.
     void setLevelMod(float m) noexcept { levelMod_ = m; }
+    /// Jump the oscillator's phase (L4.4: unison copies start at random phases, so they don't add up in phase).
+    void setPhase(dsp::Phase p) noexcept { phasor_.reset(p); }
     /// Glides to the new level (one-pole, see prepare): for live knob changes while a note sounds (L2.4).
     void setLevelSmoothed(float level) noexcept { level_.setTarget(level); }
 

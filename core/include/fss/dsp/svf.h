@@ -65,6 +65,18 @@ public:
         a3_ = g * a2_;
     }
 
+    /// Take another filter's settings (coefficients) but keep this one's state (L4.4: the voice's right-channel
+    /// filter follows the left one without paying for a second tan()).
+    void setFrom(const Svf& o) noexcept
+    {
+        cutoffHz_ = o.cutoffHz_;
+        q_ = o.q_;
+        k_ = o.k_;
+        a1_ = o.a1_;
+        a2_ = o.a2_;
+        a3_ = o.a3_;
+    }
+
     /// One sample; all three outputs at once (they cost the same as one).
     [[nodiscard]] Out tick(float x) noexcept
     {

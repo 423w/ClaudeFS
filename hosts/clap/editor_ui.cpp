@@ -633,6 +633,8 @@ void drawEditor(EditorModel& m, EditorState& st)
     controlTable(m, st, "global", group("Global", synth::param_id::kAlgorithm));
     ImGui::SeparatorText("Voice");
     controlTable(m, st, "voice", group("Voice"));
+    ImGui::SeparatorText("Unison"); // L4.4
+    controlTable(m, st, "unison", group("Unison"));
     ImGui::EndChild();
 
     for (int op = 0; op < synth::kNumOps; ++op) {

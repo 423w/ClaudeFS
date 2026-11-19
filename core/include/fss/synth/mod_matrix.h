@@ -55,8 +55,9 @@ enum class ModDst : std::uint8_t { // APPEND ONLY
     Lfo1Rate,  // octaves
     OpALevel, OpBLevel, OpCLevel, OpDLevel, // × max(0, 1 + x): a modulator's index or a carrier's loudness
     OpAPitch, OpBPitch, OpCPitch, OpDPitch, // semitones, that operator only
+    Pan,       // −1 (left) .. 1 (right), on top of the unison spread (L4.4)
 };
-inline constexpr int kNumModDests = 15;
+inline constexpr int kNumModDests = 16;
 
 struct ModSourceInfo {
     std::string_view name;
@@ -79,6 +80,7 @@ inline constexpr ModDestInfo kModDests[kNumModDests] = {
     {"LFO 1 rate", "oct", 4.0f}, {"Op A level", "x", 1.0f},   {"Op B level", "x", 1.0f},
     {"Op C level", "x", 1.0f},   {"Op D level", "x", 1.0f},   {"Op A pitch", "st", 24.0f},
     {"Op B pitch", "st", 24.0f}, {"Op C pitch", "st", 24.0f}, {"Op D pitch", "st", 24.0f},
+    {"Pan", "", 1.0f},
 };
 
 /// One user slot, as the patch stores it (param table units: the amount is a percentage of the range).

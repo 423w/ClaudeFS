@@ -137,6 +137,20 @@ public:
         applyPitchRatio();
     }
     void setOpLevelMod(int i, float m) noexcept { ops_[static_cast<std::size_t>(i)].setLevelMod(m); }
+
+    /// Unison (L4.4): give every operator a random start phase (seeded, so renders reproduce), and forget the
+    /// feedback history, so a copy doesn't start in phase with the others.
+    void randomizePhases(std::uint32_t seed) noexcept
+    {
+        std::uint32_t x = seed ? seed : 0x9E3779B9u;
+        for (Operator& op : ops_) {
+            x ^= x << 13; // xorshift32 (util/random.h's generator, inlined to keep this header light)
+            x ^= x >> 17;
+            x ^= x << 5;
+            op.setPhase(x);
+        }
+        prev_ = prev2_ = {};
+    }
     /// Level, velocity sensitivity, key level: the new level is a *target*, reached by the operator's smoother.
     void refreshLevels() noexcept
     {

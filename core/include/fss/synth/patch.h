@@ -100,6 +100,14 @@ struct ModMatrixParams {
     dsp::AdsrParams env{.attackMs = 1.0f, .decayMs = 500.0f, .sustain = 0.0f, .releaseMs = 300.0f}; // "Mod env"
 };
 
+/// Unison (L4.4): each voice runs `voices` copies of its FM core, at evenly spread positions −1..1 (inner
+/// positions first): copy detune = position × detuneCents/2, copy pan = position × width.
+struct UnisonParams {
+    std::uint8_t voices = 1;   // 1..8; 1 = the plain mono voice of before L4.4, bit for bit
+    float detuneCents = 20.0f; // between the two outermost copies
+    float widthPct = 80.0f;    // how far the outermost copies are panned
+};
+
 struct VoiceParams {
     VoiceMode mode = VoiceMode::Poly;
     float glideMs = 0.0f;          // portamento time, constant per glide (0 = off)
@@ -117,6 +125,7 @@ struct Patch {
     ModRoutes routes{};
     ModMatrixParams mod{};                // L4.1: 8 slots + the mod envelope; all slots off by default
     VoiceParams voice{};
+    UnisonParams unison{};                // L4.4
     util::Hz tuningA4{440.0};
     util::Semitones bendRange{2.0};       // full pitch-bend wheel deflection
     // Output level in dB, the param table's unit. Until L3.4 this was a linear gain (outputGain), and the

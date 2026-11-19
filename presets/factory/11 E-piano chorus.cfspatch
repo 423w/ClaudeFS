@@ -44,6 +44,11 @@ name = E-piano chorus
 52 = 1              # Glide legato (On)
 53 = 0              # Priority (Last)
 
+# Unison
+60 = 1              # Unison
+61 = 20             # Unison detune [cents]
+62 = 80             # Unison width [%]
+
 # Mod env
 70 = 1              # Mod env attack [ms]
 71 = 500            # Mod env decay [ms]

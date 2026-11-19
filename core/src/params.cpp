@@ -64,6 +64,9 @@ float getParam(const Patch& patch, const ParamInfo& p) noexcept
         case param_id::kGlide: return patch.voice.glideMs;
         case param_id::kGlideLegato: return patch.voice.glideLegatoOnly ? 1.0f : 0.0f;
         case param_id::kPriority: return static_cast<float>(patch.voice.priority);
+        case param_id::kUnisonVoices: return static_cast<float>(patch.unison.voices);
+        case param_id::kUnisonDetune: return patch.unison.detuneCents;
+        case param_id::kUnisonWidth: return patch.unison.widthPct;
         case param_id::kModEnvAttack: return patch.mod.env.attackMs;
         case param_id::kModEnvDecay: return patch.mod.env.decayMs;
         case param_id::kModEnvSustain: return patch.mod.env.sustain;
@@ -174,6 +177,9 @@ void setParam(Patch& patch, const ParamInfo& p, float plain) noexcept
         case param_id::kGlide: patch.voice.glideMs = v; return;
         case param_id::kGlideLegato: patch.voice.glideLegatoOnly = v >= 0.5f; return;
         case param_id::kPriority: patch.voice.priority = static_cast<NotePriority>(static_cast<int>(v)); return;
+        case param_id::kUnisonVoices: patch.unison.voices = static_cast<std::uint8_t>(v); return;
+        case param_id::kUnisonDetune: patch.unison.detuneCents = v; return;
+        case param_id::kUnisonWidth: patch.unison.widthPct = v; return;
         case param_id::kModEnvAttack: patch.mod.env.attackMs = v; return;
         case param_id::kModEnvDecay: patch.mod.env.decayMs = v; return;
         case param_id::kModEnvSustain: patch.mod.env.sustain = v; return;

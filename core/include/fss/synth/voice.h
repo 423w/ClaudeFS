@@ -6,6 +6,12 @@
 // Since L4.1 every modulation goes through the mod matrix (mod_matrix.h): the voice fills in its own sources
 // (LFO 1, envelopes, velocity, key, random), adds the per-voice slots to the Engine's global sums, and applies
 // the result to pitch, cutoff, resonance, index, amp, LFO 1 rate and each operator's level and pitch.
+// Since L4.4 the FM core can run as 1–8 UNISON copies, detuned and panned, so a voice is stereo:
+//
+//   FmVoice copy 0 ─┐  detune d₀, pan p₀, gain g₀
+//   FmVoice copy 1 ─┼─► Σ (power-normalized, constant-power pan) ─► SVF L / SVF R ─► amp, pan ─► steal fade
+//   ...           ──┘
+// With one centred copy (unison 1, nothing panning) the voice takes the old mono path, bit for bit.
 #pragma once
 
 #include <fss/dsp/adsr.h>
@@ -18,7 +24,10 @@
 #include <fss/util/random.h>
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <cstdint>
+#include <numbers>
 
 namespace fss::synth {
 
@@ -38,6 +47,31 @@ struct VoiceControl {
     const ModRouting* routing = &kNoModRouting; // the per-voice slots
 };
 
+inline constexpr int kMaxUnison = 8;
+
+/// One sample of a stereo voice (L4.4).
+struct StereoSample {
+    float l, r;
+};
+
+/// Where unison copy k of n sits, −1..1: evenly spaced, the INNER positions first (copy 0 nearest the centre),
+/// so adding or removing copies moves copy 0 as little as possible.
+///   n = 3: 0, −1, +1     n = 4: −⅓, +⅓, −1, +1     n = 2: −1, +1
+[[nodiscard]] constexpr float unisonPosition(int k, int n) noexcept
+{
+    if (n <= 1)
+        return 0.0f;
+    const float step = 2.0f / static_cast<float>(n - 1);
+    if (n % 2 == 1) {
+        if (k == 0)
+            return 0.0f;
+        const float p = static_cast<float>((k + 1) / 2) * step;
+        return (k % 2 == 1) ? -p : p;
+    }
+    const float p = (static_cast<float>(k / 2) + 0.5f) * step;
+    return (k % 2 == 0) ? -p : p;
+}
+
 // FilterMode is Off followed by the SvfMode values in the same order (tick() relies on it).
 static_assert(static_cast<int>(FilterMode::LowPass) == static_cast<int>(dsp::SvfMode::LowPass) + 1 &&
               static_cast<int>(FilterMode::Notch) == static_cast<int>(dsp::SvfMode::Notch) + 1);
@@ -46,10 +80,17 @@ class Voice {
 public:
     void prepare(double sampleRate, float stealFadeMs, float levelSmoothingMs = 5.0f) noexcept
     {
-        fm_.prepare(sampleRate, levelSmoothingMs);
+        for (FmVoice& f : fm_)
+            f.prepare(sampleRate, levelSmoothingMs);
+        for (UnisonCopy& c : copy_) { // 20 ms: a count change fades a copy in or out; detune/pan glide
+            c.gain.prepare(sampleRate, 20.0f);
+            c.detune.prepare(sampleRate, 20.0f);
+            c.pan.prepare(sampleRate, 20.0f);
+        }
         filterEnv_.prepare(sampleRate);
         modEnv_.prepare(sampleRate);
         svf_.prepare(sampleRate);
+        svfR_.prepare(sampleRate);
         lfo1_.prepare(sampleRate);
         // Linear fade length; at least 1 sample so a "0 ms" fade is an instant cut, not a divide by zero.
         fadeStep_ = 1.0f / std::max(1.0f, stealFadeMs * 0.001f * static_cast<float>(sampleRate));
@@ -58,10 +99,14 @@ public:
 
     void reset() noexcept
     {
-        fm_.reset();
+        for (FmVoice& f : fm_)
+            f.reset();
         filterEnv_.reset();
         modEnv_.reset();
         svf_.reset();
+        svfR_.reset();
+        copies_ = target_ = 1;
+        stereo_ = false;
         host_.fill(0.0f);
         lfoRateMod_ = 0.0f;
         busy_ = released_ = fading_ = sustained_ = false;
@@ -76,7 +121,16 @@ public:
                dsp::Phase lfo1Phase = 0) noexcept
     {
         patch_ = &patch;
-        fm_.start(note, patch);
+        // Unison (L4.4): every copy starts the note; copy 0 at phase 0 (as before L4.4), the others at random
+        // phases, so N copies don't start as one N-times-louder waveform. The layout snaps (no glide).
+        target_ = copies_ = std::clamp<int>(patch.unison.voices, 1, kMaxUnison);
+        for (int k = 0; k < copies_; ++k) {
+            fm_[static_cast<std::size_t>(k)].start(note, patch);
+            if (k > 0)
+                fm_[static_cast<std::size_t>(k)].randomizePhases(static_cast<std::uint32_t>(age * 2654435761u + 977u * static_cast<std::uint32_t>(k)));
+        }
+        layoutUnison(patch.unison, true);
+        stereo_ = false;
         // The filter's per-note offset (key tracking + velocity) is fixed for the note, in octaves; it is
         // re-read in tick() through the patch so live knob changes still apply (cheap: two multiplies).
         velocity_ = note.velocity;
@@ -109,7 +163,8 @@ public:
     {
         sustained_ = false;
         if (busy_ && !released_) {
-            fm_.noteOff();
+            for (int k = 0; k < copies_; ++k)
+                fm_[static_cast<std::size_t>(k)].noteOff();
             filterEnv_.noteOff();
             modEnv_.noteOff();
             released_ = true;
@@ -138,12 +193,13 @@ public:
     void legatoTo(std::uint8_t key, int glideSamples) noexcept
     {
         const float from = pitch();
-        fm_.setKey(key);
+        for (int k = 0; k < copies_; ++k)
+            fm_[static_cast<std::size_t>(k)].setKey(key);
         glideFrom(from - static_cast<float>(key), glideSamples);
     }
 
     /// Current pitch in semitones (MIDI key numbers), including an unfinished glide; excludes bend and vibrato.
-    [[nodiscard]] float pitch() const noexcept { return static_cast<float>(fm_.key()) + glide_; }
+    [[nodiscard]] float pitch() const noexcept { return static_cast<float>(fm_[0].key()) + glide_; }
 
     /// Steal: fade to silence over the steal-fade time, then become free. Never an instant cut (click).
     void kill() noexcept
@@ -152,8 +208,33 @@ public:
             fading_ = true;
     }
 
-    void refreshFrequencies() noexcept { fm_.refreshFrequencies(); }
-    void refreshLevels() noexcept { fm_.refreshLevels(); }
+    void refreshFrequencies() noexcept
+    {
+        for (int k = 0; k < copies_; ++k)
+            fm_[static_cast<std::size_t>(k)].refreshFrequencies();
+    }
+    void refreshLevels() noexcept
+    {
+        for (int k = 0; k < copies_; ++k)
+            fm_[static_cast<std::size_t>(k)].refreshLevels();
+    }
+
+    /// Unison settings changed while the note sounds (L4.4): new copies start as clones of copy 0 (same
+    /// envelope state, own random phases) and fade in; removed ones fade out; detune and pan glide.
+    void refreshUnison() noexcept
+    {
+        if (!patch_)
+            return;
+        const int n = std::clamp<int>(patch_->unison.voices, 1, kMaxUnison);
+        for (int k = copies_; k < n; ++k) { // copies that aren't running yet: clone copy 0
+            fm_[static_cast<std::size_t>(k)] = fm_[0];
+            fm_[static_cast<std::size_t>(k)].randomizePhases(static_cast<std::uint32_t>(age_ * 2654435761u + 977u * static_cast<std::uint32_t>(k) + 13u));
+            copy_[static_cast<std::size_t>(k)].gain.reset(0.0f);
+        }
+        target_ = n;
+        copies_ = std::max(copies_, n);
+        layoutUnison(patch_->unison, false);
+    }
     void refreshLfo() noexcept
     {
         if (patch_)
@@ -161,7 +242,8 @@ public:
     }
     void refreshEnvelopes() noexcept
     {
-        fm_.refreshEnvelopes();
+        for (int k = 0; k < copies_; ++k)
+            fm_[static_cast<std::size_t>(k)].refreshEnvelopes();
         if (patch_) {
             filterEnv_.setParams(patch_->filter.env);
             modEnv_.setParams(patch_->mod.env);
@@ -173,7 +255,7 @@ public:
     void setHostMod(ModDst d, float value) noexcept { host_[idx(d)] = value; }
 
     /// One sample. `ctl` carries the Engine's live (smoothed) matrix (L2.4) and filter controls (L1.10).
-    [[nodiscard]] FSS_FORCEINLINE float tick(const VoiceControl& ctl) noexcept // inlined: see util/inline.h
+    [[nodiscard]] FSS_FORCEINLINE StereoSample tick(const VoiceControl& ctl) noexcept // inlined: util/inline.h
     {
         // 1. This voice's modulation sources (L4.1). Envelopes and LFO 1 always run, so a slot switched on
         //    mid-note finds them in place.
@@ -210,16 +292,19 @@ public:
         if (glide_ != 0.0f) // portamento: one constant step per sample toward 0, landing exactly on it
             glide_ = std::abs(glide_) <= glideStep_ ? 0.0f : glide_ - std::copysign(glideStep_, glide_);
         // All pitch modulation meets here, in semitones: bend (L2.5) + glide (L2.5) + the matrix (vibrato...).
-        fm_.setPitchOffset(ctl.bendSemitones + glide_ + g[idx(ModDst::Pitch)] + v[idx(ModDst::Pitch)]);
+        const float pitchOffset = ctl.bendSemitones + glide_ + g[idx(ModDst::Pitch)] + v[idx(ModDst::Pitch)];
         // Operators: only while a slot reaches one (and once more after the last such slot goes, to put them
         // back to unmodulated: otherwise they'd keep the last offset).
         const bool opsNow = (touched & kOpDestBits) != 0;
         if (opsNow || opModActive_)
             for (int k = 0; k < kNumOps; ++k) {
                 const auto d = static_cast<std::size_t>(k);
-                fm_.setOpPitch(k, both(static_cast<ModDst>(idx(ModDst::OpAPitch) + d)));
+                const float op = both(static_cast<ModDst>(idx(ModDst::OpAPitch) + d));
                 const float lv = both(static_cast<ModDst>(idx(ModDst::OpALevel) + d));
-                fm_.setOpLevelMod(k, lv != 0.0f ? std::max(0.0f, 1.0f + lv) : 1.0f);
+                for (int c = 0; c < copies_; ++c) {
+                    fm_[static_cast<std::size_t>(c)].setOpPitch(k, op);
+                    fm_[static_cast<std::size_t>(c)].setOpLevelMod(k, lv != 0.0f ? std::max(0.0f, 1.0f + lv) : 1.0f);
+                }
             }
         opModActive_ = opsNow;
         if (const float rate = both(ModDst::Lfo1Rate); rate != lfoRateMod_) {
@@ -239,7 +324,44 @@ public:
             alg = &scaled_;
         }
 
-        float y = fm_.tick(*alg);
+        // 4. The FM core: one copy, centred and unpanned (the voice of before L4.4, bit for bit), or the unison
+        //    copies, each detuned and panned, summed into a stereo pair (L4.4).
+        const float panMod = both(ModDst::Pan);
+        float yl = 0.0f, yr = 0.0f;
+        const bool mono = copies_ == 1 && unisonCentred() && panMod == 0.0f;
+        if (mono) {
+            fm_[0].setPitchOffset(pitchOffset);
+            yl = yr = fm_[0].tick(*alg);
+        } else {
+            if (!stereo_) { // entering stereo: the right filter takes over the left one's state (no click)
+                svfR_ = svf_;
+                stereo_ = true;
+            }
+            float power = 0.0f;
+            for (int k = 0; k < copies_; ++k) {
+                UnisonCopy& c = copy_[static_cast<std::size_t>(k)];
+                const float gk = c.gain.tick(), dk = c.detune.tick(), pk = c.pan.tick();
+                FmVoice& f = fm_[static_cast<std::size_t>(k)];
+                f.setPitchOffset(pitchOffset + dk);
+                const float y = f.tick(*alg);
+                // Constant-power pan, scaled by √2 so a centred copy has gain 1 (the mono level): see the journal.
+                const float pan = std::clamp(pk + panMod, -1.0f, 1.0f);
+                if (pan != c.lastPan) {
+                    const float th = (1.0f + pan) * (std::numbers::pi_v<float> * 0.25f);
+                    c.gl = std::numbers::sqrt2_v<float> * std::cos(th);
+                    c.gr = std::numbers::sqrt2_v<float> * std::sin(th);
+                    c.lastPan = pan;
+                }
+                yl += gk * c.gl * y;
+                yr += gk * c.gr * y;
+                power += gk * gk;
+            }
+            // Copies at random phases are uncorrelated: normalize by power, so N copies are as loud as one.
+            const float norm = power > 1e-9f ? 1.0f / std::sqrt(power) : 0.0f;
+            yl *= norm;
+            yr *= norm;
+            settleUnison();
+        }
         if (const FilterParams& f = patch_->filter; f.mode != FilterMode::Off) {
             const float octaves = ctl.cutoffOctaves + f.envOctaves * env +
                                   f.keyTrack * (pitch() - kKeyBreakpoint) / 12.0f + // follows a glide smoothly
@@ -247,35 +369,104 @@ public:
             const float res = both(ModDst::Resonance);
             // Octaves → Hz, then the SVF prewarps (tan). Two transcendentals per sample per voice: measured
             // in L2.6. The SVF clamps the result to [1 Hz, 0.49·fs].
+            const auto mode = static_cast<dsp::SvfMode>(static_cast<int>(f.mode) - 1); // FilterMode = SvfMode + 1
             svf_.set(util::pow2(octaves), res != 0.0f ? ctl.q * util::pow2(res) : ctl.q); // pow2: the fast exp (L2.6)
-            y = svf_.tick(y, static_cast<dsp::SvfMode>(static_cast<int>(f.mode) - 1)); // FilterMode = SvfMode + 1
+            if (mono) {
+                yl = yr = svf_.tick(yl, mode);
+            } else {
+                svfR_.setFrom(svf_); // same coefficients, its own state
+                yl = svf_.tick(yl, mode);
+                yr = svfR_.tick(yr, mode);
+            }
         }
-        if (const float amp = both(ModDst::Amp); amp != 0.0f)
-            y *= util::pow2(amp * (1.0f / 6.0206f)); // dB → gain: 6.02 dB per doubling
+        if (const float amp = both(ModDst::Amp); amp != 0.0f) {
+            const float a = util::pow2(amp * (1.0f / 6.0206f)); // dB → gain: 6.02 dB per doubling
+            yl *= a;
+            yr *= a;
+        }
         if (fading_) {
             fadeGain_ -= fadeStep_;
             if (fadeGain_ <= 0.0f) {
                 fadeGain_ = 0.0f;
                 busy_ = false; // silent: free the slot
             }
-            y *= fadeGain_;
-        } else if (!fm_.isActive(*ctl.alg)) {
-            busy_ = false; // release finished on its own
+            yl *= fadeGain_;
+            yr *= fadeGain_;
+        } else if (!fm_[0].isActive(*ctl.alg)) {
+            busy_ = false; // release finished on its own (every copy shares copy 0's envelopes)
         }
-        return y;
+        return {yl, yr};
     }
+
+    /// How many unison copies are running (L4.4; includes copies still fading out).
+    [[nodiscard]] int unisonCopies() const noexcept { return copies_; }
 
     [[nodiscard]] bool busy() const noexcept { return busy_; }
     [[nodiscard]] bool released() const noexcept { return released_; }
     [[nodiscard]] bool fading() const noexcept { return fading_; }
     [[nodiscard]] bool sustained() const noexcept { return sustained_; }
     [[nodiscard]] float fadeGain() const noexcept { return fadeGain_; }
-    [[nodiscard]] std::uint8_t key() const noexcept { return fm_.key(); }
+    [[nodiscard]] std::uint8_t key() const noexcept { return fm_[0].key(); }
     [[nodiscard]] std::int32_t noteId() const noexcept { return noteId_; }
     [[nodiscard]] std::uint64_t age() const noexcept { return age_; }
 
 private:
-    FmVoice fm_;
+    struct UnisonCopy {
+        dsp::OnePoleSmoother gain{}, detune{}, pan{}; // gain 0..1, detune in semitones, pan −1..1
+        float lastPan = 2.0f, gl = 1.0f, gr = 1.0f;   // cached pan gains (recomputed only when the pan moves)
+    };
+
+    /// Targets for every copy from the unison settings; `snap` = jump there (note start).
+    void layoutUnison(const UnisonParams& u, bool snap) noexcept
+    {
+        const int n = target_;
+        for (int k = 0; k < kMaxUnison; ++k) {
+            UnisonCopy& c = copy_[static_cast<std::size_t>(k)];
+            const float pos = unisonPosition(k, n);
+            if (k < n) {
+                c.gain.setTarget(1.0f);
+                c.detune.setTarget(pos * u.detuneCents * 0.005f); // ½ × spread, cents → semitones
+                c.pan.setTarget(pos * u.widthPct * 0.01f);
+            } else {
+                c.gain.setTarget(0.0f); // fade out; keep its position while it fades
+            }
+            if (snap) {
+                c.gain.reset(c.gain.target());
+                c.detune.reset(c.detune.target());
+                c.pan.reset(c.pan.target());
+            }
+        }
+    }
+
+    /// Copy 0 alone, at full gain, no detune, centred: the mono voice.
+    [[nodiscard]] bool unisonCentred() const noexcept
+    {
+        const UnisonCopy& c = copy_[0];
+        return c.gain.value() == 1.0f && c.detune.value() == 0.0f && c.pan.value() == 0.0f &&
+               c.gain.target() == 1.0f && c.detune.target() == 0.0f && c.pan.target() == 0.0f;
+    }
+
+    /// Snap smoothers that have arrived (within 1e-5) and stop running copies that have faded out, so a voice
+    /// back at unison 1 returns to the exact mono path and an unused copy stops costing CPU.
+    void settleUnison() noexcept
+    {
+        for (int k = 0; k < copies_; ++k) {
+            UnisonCopy& c = copy_[static_cast<std::size_t>(k)];
+            for (dsp::OnePoleSmoother* s : {&c.gain, &c.detune, &c.pan})
+                if (s->value() != s->target() && std::abs(s->value() - s->target()) < 1e-5f)
+                    s->reset(s->target());
+        }
+        while (copies_ > target_ && copy_[static_cast<std::size_t>(copies_ - 1)].gain.value() < 1e-4f)
+            --copies_;
+        if (copies_ == 1 && unisonCentred())
+            stereo_ = false; // back to mono: the next sample takes the mono path (L and R were equal by then)
+    }
+
+    std::array<FmVoice, kMaxUnison> fm_{}; // unison copies (L4.4); copy 0 is the voice of before L4.4
+    std::array<UnisonCopy, kMaxUnison> copy_{};
+    int copies_ = 1, target_ = 1; // copies running (incl. fading out), and the count asked for
+    bool stereo_ = false;         // last sample took the stereo path (svfR_ in use)
+    dsp::Svf svfR_;               // the right channel's filter (L4.4)
     dsp::Adsr filterEnv_;
     dsp::Adsr modEnv_;    // L4.1: a matrix source only
     float random_ = 0.0f; // L4.1: this note's random value, −1..1

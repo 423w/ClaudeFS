@@ -206,7 +206,7 @@ Modes (tell Claude which one you want):
 - [x] L4.1 Mod matrix (L1.11 routes = fixed slots, golden test; CLAP poly-mod on cutoff/resonance; FL check: docs/FL-STUDIO.md section 7)
 - [ ] L4.2 Richer operators
 - [ ] L4.3 Wavetables
-- [ ] L4.4 Unison & stereo
+- [x] L4.4 Unison & stereo (FM-core copies, "Wide pad"; supersaw waits for L4.2; FL check: docs/FL-STUDIO.md section 7)
 - [ ] L4.5 Drive & ADAA
 - [ ] L4.6 Detours
 - [ ] L4.7 Preset bank ★M6

@@ -15,7 +15,7 @@
 cmake_minimum_required(VERSION 3.25)
 
 project(CFS
-    VERSION 0.4.1 # branch.lesson of the last finished lesson; the plugin reports it to the host
+    VERSION 0.4.4 # branch.lesson of the last finished lesson; the plugin reports it to the host
     DESCRIPTION "Claude's build of FirstStreetSynthesis, an FM-core hybrid synth"
     LANGUAGES CXX)
 
